@@ -14,6 +14,7 @@ import os
 import re
 import socket
 import sys
+import time
 from pathlib import Path
 
 import cv2
@@ -326,7 +327,9 @@ def read(card, layout=None, call=None):
     layout = layout or lay.load()
     img_path = store.BASE / card["card_img"]
     try:
+        started = time.time()
         blocks, source = parse_image(img_path, call)
+        card["read_secs"] = round(time.time() - started, 1)
         got = fields(blocks, layout)
         card.update(blocks=[{"type": b["type"], "text": b["text"], "box": b["box"]} for b in blocks],
                     line=got["line"], reducto_line=got["line"], bbox=got["bbox"], words=got["words"],

@@ -4,103 +4,170 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hand-Me-Down</title>
 <style>
-  /* The visitor screen: passing notes with a stranger. Paper, ink and mail.
-     No typed words here, by anyone. The only text is the SIMULATION label on a simulated clip.
-     Stages (card/server.py): idle, reading, confirm, choosing, card, writing, held, delivered. */
+  /* The visitor screen. An engineer's notebook on a writing desk: on the left the cards, on the right
+     the machine. Handwriting is the visitors' own; every label is in LABELS (bottom of the page), set
+     by plain code from measurements, never written by a model. Stages (card/server.py): idle, reading,
+     confirm, choosing, card, writing, held, delivered. */
   :root {
-    --paper: #f3ede1; --ink: #1d1b18; --mark: #c2402d; --card: #fbf8f1; --plate: #e2d8c7;
-    --slot-y: 87vh;                    /* the mail slot's top edge: cards vanish below it */
-    --big: min(62vw, 106vh);           /* the card in play */
-    --small: min(25vw, 42vh);          /* cards in the idle stack */
+    --paper: #f2ece0; --ink: #1d1b18; --soft: rgba(29, 27, 24, .58); --faint: rgba(29, 27, 24, .16);
+    --mark: #c2402d; --pencil: #3a6db3; --card: #fcfaf4;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --type: "American Typewriter", "Courier Prime", "Courier New", serif;
   }
-  html, body { height: 100%; margin: 0; overflow: hidden; }
+  html, body { height: 100%; margin: 0; overflow: hidden; background: var(--paper); color: var(--ink); }
   body {
-    background-color: var(--paper);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .33 0 0 0 0 .26 0 0 0 0 .18 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    cursor: none;
+    cursor: none; font-family: var(--mono);
+    background:
+      radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(80, 55, 30, .13) 100%),
+      radial-gradient(circle, rgba(29, 27, 24, .085) .09vh, transparent .1vh) 0 0 / 2.6vh 2.6vh,
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .33 0 0 0 0 .26 0 0 0 0 .18 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      var(--paper);
   }
 
-  /* --- an index card, drawn: faint blue rules, a red header line, a soft shadow --- */
+  /* ---------- top bar: the name, the four steps, the counters and the clock ---------- */
+  #top { position: absolute; left: 3vw; right: 3vw; top: 0; height: 8vh; display: flex; align-items: center; justify-content: space-between;
+         border-bottom: .12vh solid var(--faint); font-size: 1.45vh; letter-spacing: .18em; }
+  .brand { display: flex; align-items: center; gap: 1.2vh; font-weight: 700; }
+  .brand i { width: 2.6vh; height: 2.6vh; border: .22vh solid var(--mark); border-radius: 50%; position: relative; }
+  .brand i::after { content: ""; position: absolute; inset: .45vh; border: .12vh solid var(--mark); border-radius: 50%; }
+  #steps { display: flex; gap: 3.2vh; list-style: none; margin: 0; padding: 0; color: var(--soft); }
+  #steps li { display: flex; align-items: center; gap: .9vh; transition: color .5s; }
+  #steps li::before { content: ""; width: .9vh; height: .9vh; border-radius: 50%; border: .15vh solid currentColor; transition: background .5s; }
+  #steps li.done { color: var(--ink); } #steps li.done::before { background: var(--ink); }
+  #steps li.now { color: var(--mark); } #steps li.now::before { background: var(--mark); animation: beat 1.4s ease-in-out infinite; }
+  #steps li + li { padding-left: 3.2vh; border-left: .12vh solid var(--faint); }
+  @keyframes beat { 0%, 100% { transform: scale(1) } 50% { transform: scale(1.5) } }
+  .meta { display: flex; gap: 2.6vh; color: var(--soft); }
+  #clock { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* ---------- the desk ---------- */
+  #desk { position: absolute; left: 3vw; top: 9vh; width: 57vw; height: 84vh; }
   .card {
-    position: absolute; aspect-ratio: 127 / 76; border-radius: .45vh;
-    background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 127 76' preserveAspectRatio='none'%3E%3Cg fill='none' stroke-width='.2'%3E%3Cpath d='M0 12.4H127M0 13.3H127' stroke='%23c2402d' stroke-opacity='.5'/%3E%3Cpath d='M0 19.8H127M0 26.2H127M0 32.6H127M0 39H127M0 45.4H127M0 51.8H127M0 58.2H127M0 64.6H127M0 71H127' stroke='%235684be' stroke-opacity='.22'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat;
-    box-shadow: 0 .2vh .4vh rgba(70, 50, 30, .12), 0 1.6vh 3vh -.8vh rgba(70, 50, 30, .26);
+    position: absolute; aspect-ratio: 127 / 76; border-radius: .5vh; left: 0; top: 0;
+    background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 127 76' preserveAspectRatio='none'%3E%3Cg fill='none' stroke-width='.2'%3E%3Cpath d='M0 12.4H127M0 13.3H127' stroke='%23c2402d' stroke-opacity='.55'/%3E%3Cpath d='M0 19.8H127M0 26.2H127M0 32.6H127M0 39H127M0 45.4H127M0 51.8H127M0 58.2H127M0 64.6H127M0 71H127' stroke='%235684be' stroke-opacity='.25'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat;
+    box-shadow: 0 .15vh .3vh rgba(70, 50, 30, .14), 0 1.2vh 2.4vh -.6vh rgba(70, 50, 30, .28), inset 0 0 0 .1vh rgba(255, 255, 255, .7);
+    transform: translate(-50%, -50%) rotate(var(--r, 0deg));
   }
   .card .area { position: absolute; left: 6%; right: 6%; top: 21%; bottom: 6%; container-type: size; display: grid; place-items: center; }
   .inkbox { position: relative; width: min(100cqw, calc(100cqh * var(--ar, 2.3))); aspect-ratio: var(--ar, 2.3); }
-  .inkbox img { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 0 .06vh rgba(29, 27, 24, .85)); }
+  .inkbox img { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 0 .05vh rgba(29, 27, 24, .8)); }
   .inkbox .row { display: none; }
   .inkbox.revealing .full { display: none; }
   .inkbox.revealing .row { display: block; }
-  .inkbox svg.under { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-  .under path { fill: none; stroke: var(--mark); stroke-linecap: round; stroke-linejoin: round; opacity: .82;
-                stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.3s cubic-bezier(.5, 0, .3, 1); }
+  .inkbox svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .under path { fill: none; stroke: var(--mark); stroke-linecap: round; opacity: .85; stroke-dasharray: 1; stroke-dashoffset: 1;
+                transition: stroke-dashoffset 1.2s cubic-bezier(.5, 0, .3, 1); }
   .under path.on { stroke-dashoffset: 0; }
-  .nib { position: absolute; width: 1.1vh; height: 1.1vh; margin: -.55vh 0 0 -.55vh; border-radius: 50%; background: var(--ink);
-         opacity: 0; transition: opacity .4s; }
-  .revealing .nib { opacity: .8; }
+  .boxes rect { fill: rgba(58, 109, 179, .06); stroke: var(--pencil); stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0; }
+  .boxes rect.on { stroke-dashoffset: 0; opacity: .9; transition: stroke-dashoffset .5s ease, opacity .2s; }
+  .boxes text { font: 600 11px var(--mono); fill: var(--pencil); opacity: 0; transition: opacity .3s .3s; }
+  .boxes text.on { opacity: .9; }
+  .nib { position: absolute; width: 1.2vh; height: 1.2vh; margin: -.6vh 0 0 -.6vh; border-radius: 50%; background: var(--mark);
+         box-shadow: 0 0 0 .5vh rgba(194, 64, 45, .18); display: none; }
+  .revealing .nib { display: block; }
 
-  /* --- the card in play, and the lane it travels in: everything below the slot is hidden --- */
-  #lane { position: absolute; left: 0; right: 0; top: 0; height: var(--slot-y); overflow: hidden; }
-  .main { width: var(--big); left: 50%; top: 45vh; transform: translate(-50%, -50%) rotate(var(--tilt, -.6deg)); display: none; }
+  .main { width: 42vw; display: none; z-index: 20; }
   .main.shown { display: block; }
-  #theirs { --tilt: .7deg; }
+  .postmark { position: absolute; right: 3%; top: -12%; width: 23%; aspect-ratio: 1; color: var(--mark); opacity: 0; mix-blend-mode: multiply; pointer-events: none; }
+  .postmark.landed { opacity: .92; transform: rotate(-9deg); }
+  .postmark text { font: 700 15px var(--mono); fill: currentColor; letter-spacing: .06em; }
 
-  /* --- the mail slot: a plate, a dark slit, a little light on the lower lip --- */
-  #plate { position: absolute; left: 50%; top: var(--slot-y); width: 56vw; height: 4.4vh; transform: translate(-50%, -38%);
-           background: var(--plate); border-radius: 2.2vh; box-shadow: inset 0 .2vh .5vh rgba(90, 70, 40, .25), 0 .15vh 0 rgba(255, 255, 255, .6); }
-  #slit { position: absolute; left: 50%; top: var(--slot-y); width: 50vw; height: 1.2vh; transform: translateX(-50%);
-          background: #2a2622; border-radius: .6vh; box-shadow: inset 0 .4vh .5vh rgba(0, 0, 0, .7), 0 .18vh 0 rgba(255, 255, 255, .5); }
+  /* reading: a blank card under a scanning beam */
+  #scan { width: 42vw; left: 50%; top: 40%; display: none; overflow: hidden; z-index: 15; }
+  .stage-reading #scan { display: block; animation: rise .6s ease-out both; }
+  #scan::after { content: ""; position: absolute; left: 0; right: 0; height: 18%; top: -18%;
+                 background: linear-gradient(to bottom, transparent, rgba(58, 109, 179, .16) 70%, rgba(58, 109, 179, .7) 98%, transparent);
+                 animation: sweep 1.5s cubic-bezier(.5, 0, .5, 1) infinite; }
+  @keyframes sweep { to { top: 100% } }
+  @keyframes rise { from { opacity: 0; transform: translate(-50%, -46%) } to { opacity: 1; transform: translate(-50%, -50%) } }
 
-  /* --- confirm: a cross and a tick, drawn, either side of the slot --- */
-  .choice { all: unset; position: absolute; top: var(--slot-y); width: 9vh; height: 9vh; margin-top: -4vh; border: .35vh solid var(--ink);
-            border-radius: 50%; display: none; place-items: center; cursor: pointer; background: rgba(251, 248, 241, .6); }
-  .stage-confirm .choice { display: grid; animation: fadein .8s .5s both; }
-  #no { left: calc(50% - 37vw); } #yes { left: calc(50% + 37vw - 9vh); }
-  .choice svg { width: 4.6vh; height: 4.6vh; stroke: var(--ink); stroke-width: 5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  /* the cards being compared, and the threads to them */
+  #cands .card { width: 11.5vw; z-index: 10; opacity: 0; transition: opacity .5s, transform .6s, box-shadow .4s; }
+  #cands .card.on { opacity: 1; }
+  #cands .card.look { transform: translate(-50%, -56%) rotate(var(--r)); box-shadow: 0 .2vh .4vh rgba(70, 50, 30, .16), 0 2vh 3vh -1vh rgba(58, 109, 179, .45); }
+  #cands .card .tag { position: absolute; left: 0; top: -2.6vh; font-size: 1.15vh; letter-spacing: .14em; color: var(--soft); }
+  #threads { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 12; }
+  #threads path { fill: none; stroke-linecap: round; }
+  #threads .seek { stroke: var(--pencil); stroke-width: .16vh; stroke-dasharray: .6vh .8vh; opacity: .55; animation: flow .9s linear infinite; }
+  #threads .bond { stroke: var(--mark); stroke-width: .26vh; opacity: .85; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.4s ease .3s; }
+  #threads .bond.on { stroke-dashoffset: 0; }
+  @keyframes flow { to { stroke-dashoffset: -2.8vh } }
 
-  /* --- reading / choosing: three ink dots over the slot --- */
-  #dots { position: absolute; left: 50%; top: calc(var(--slot-y) - 7vh); transform: translateX(-50%); display: none; gap: 2.2vh; }
-  .stage-reading #dots, .stage-choosing #dots { display: flex; }
-  #dots i { width: 1.3vh; height: 1.3vh; border-radius: 50%; background: var(--ink); opacity: .12; animation: dot 1.5s ease-in-out infinite; }
-  #dots i:nth-child(2) { animation-delay: .25s; } #dots i:nth-child(3) { animation-delay: .5s; }
-  @keyframes dot { 0%, 100% { opacity: .12 } 40% { opacity: .7 } }
-  #flash { position: absolute; inset: 0; background: #fffdf8; opacity: 0; pointer-events: none; }
+  /* notes: what the machine did, in its own terse terms */
+  #notes { position: absolute; left: 50%; top: 69vh; width: 42vw; transform: translateX(-50%); z-index: 25; }
+  .line { display: flex; align-items: baseline; gap: 1.6vh; font-size: 1.5vh; letter-spacing: .14em; color: var(--soft); min-height: 3.2vh;
+          opacity: 0; transform: translateY(.6vh); transition: opacity .5s, transform .5s; }
+  .line.on { opacity: 1; transform: none; }
+  .line b { color: var(--ink); font-weight: 700; }
+  .line .ok { color: var(--mark); font-weight: 700; }
+  .typed { font: 3vh/1.25 var(--type); letter-spacing: .01em; color: var(--ink); text-transform: none; }
+  .typed::after { content: ""; display: inline-block; width: .5vh; height: 2.6vh; margin-left: .3vh; background: var(--mark); vertical-align: -.3vh; animation: caret .9s steps(1) infinite; }
+  .typed.done::after { display: none; }
+  @keyframes caret { 50% { opacity: 0 } }
+  .bar { flex: 1; height: .25vh; background: var(--faint); position: relative; align-self: center; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ink); }
+  .bar i::after { content: ""; position: absolute; right: -.5vh; top: -.5vh; width: 1.2vh; height: 1.2vh; border-radius: 50%; background: var(--mark); }
 
-  /* --- idle: a loose stack of past cards, and the team's own handwriting --- */
-  #stack { position: absolute; inset: 0; transition: opacity 1s; }
-  #stack .card { width: var(--small); transform: translate(-50%, -50%) rotate(var(--r)); transition: left 1.6s ease-in-out, top 1.6s ease-in-out, transform 1.6s ease-in-out, box-shadow 1.6s; }
-  #stack .card.lift { transform: translate(-50%, -62%) rotate(calc(var(--r) * 1.6)); box-shadow: 0 .3vh .6vh rgba(70, 50, 30, .14), 0 3vh 4vh -1vh rgba(70, 50, 30, .3); }
+  .choice { all: unset; position: absolute; top: 79vh; width: 7.4vh; height: 7.4vh; border: .3vh solid var(--ink); border-radius: 50%;
+            display: none; place-items: center; cursor: pointer; background: rgba(252, 250, 244, .7); z-index: 30; }
+  .stage-confirm .choice { display: grid; animation: fadein .6s 1.6s both; }
+  #no { left: calc(50% - 9vw); } #yes { left: calc(50% + 9vw - 7.4vh); }
+  .choice svg { width: 3.8vh; height: 3.8vh; stroke: var(--ink); stroke-width: 5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  @keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
+
+  /* idle: the loose stack, and the team's own handwriting */
+  #stack { position: absolute; inset: 0; transition: opacity .8s; }
+  #stack .card { width: 19vw; transition: left 1.6s ease-in-out, top 1.6s ease-in-out, transform 1.6s ease-in-out, box-shadow 1.6s; }
+  #stack .card.lift { transform: translate(-50%, -64%) rotate(calc(var(--r) * 1.5)); box-shadow: 0 .3vh .6vh rgba(70, 50, 30, .14), 0 3vh 4vh -1vh rgba(70, 50, 30, .3); }
   body:not(.stage-idle):not(.stage-card) #stack { opacity: 0; }
-  .stage-reading #stack, .stage-choosing #stack, .stage-held #stack { opacity: .35 !important; }
-  #invite { position: absolute; left: 50%; top: 5vh; transform: translateX(-50%); max-width: 62vw; max-height: 23vh; display: none;
-            filter: drop-shadow(0 0 .07vh rgba(29, 27, 24, .85)); transition: opacity 1s; }
+  #invite { position: absolute; left: 50%; top: 1vh; transform: translateX(-50%); max-width: 50vw; max-height: 20vh; display: none;
+            filter: drop-shadow(0 0 .06vh rgba(29, 27, 24, .85)); transition: opacity .8s; }
   #invite.shown { display: block; }
   body:not(.stage-idle):not(.stage-card) #invite { opacity: 0; }
 
-  /* --- the postmark: when the stranger wrote it, when the arm delivered it, how long it took --- */
-  .postmark { position: absolute; right: 3%; top: -9%; width: 22%; aspect-ratio: 1; color: var(--mark); opacity: 0; mix-blend-mode: multiply; pointer-events: none; }
-  .postmark.landed { opacity: .9; transform: rotate(-9deg); }
-  .postmark text { font: 700 15px ui-monospace, Menlo, monospace; fill: currentColor; letter-spacing: .06em; }
+  /* ---------- the machine ---------- */
+  #machine { position: absolute; right: 3vw; top: 11vh; width: 33vw; height: 80vh; }
+  #machine .frame { position: absolute; inset: 0; border: .12vh solid var(--faint); }
+  #machine .frame::before, #machine .frame::after { content: ""; position: absolute; width: 2.2vh; height: 2.2vh; border: .3vh solid var(--ink); }
+  #machine .frame::before { left: -.3vh; top: -.3vh; border-right: 0; border-bottom: 0; }
+  #machine .frame::after { right: -.3vh; bottom: -.3vh; border-left: 0; border-top: 0; }
+  .mhead { position: absolute; left: 2.2vh; right: 2.2vh; top: 1.8vh; display: flex; justify-content: space-between; font-size: 1.3vh; letter-spacing: .18em; color: var(--soft); }
+  .mhead b { color: var(--ink); }
+  #live::before { content: ""; display: inline-block; width: .9vh; height: .9vh; border-radius: 50%; background: var(--faint); margin-right: .8vh; vertical-align: .05vh; }
+  #live.on { color: var(--mark); } #live.on::before { background: var(--mark); animation: beat 1.2s ease-in-out infinite; }
+  #arm { position: absolute; left: 0; right: 0; top: 5vh; height: 52vh; }
+  #tele { position: absolute; left: 2.2vh; right: 2.2vh; bottom: 2vh; display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.4vh; font-size: 1.15vh; letter-spacing: .12em; color: var(--soft); }
+  #tele div { border-top: .12vh solid var(--faint); padding-top: 1vh; }
+  #tele b { display: block; margin-top: .6vh; font-size: 2.1vh; letter-spacing: .02em; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #tele .gauge { height: .3vh; background: var(--faint); margin-top: .9vh; position: relative; }
+  #tele .gauge i { position: absolute; top: -.35vh; width: .25vh; height: 1vh; background: var(--mark); left: 50%; transition: left .3s; }
+  #phase { position: absolute; left: 2.2vh; right: 2.2vh; bottom: 11.5vh; font-size: 1.3vh; letter-spacing: .18em; color: var(--soft); display: flex; justify-content: space-between; }
+  #phase b { color: var(--ink); }
 
-  @keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
-
-  /* --- arm offline: the simulation clip, always labeled as one --- */
-  #sim { position: absolute; inset: 0; background: #111; display: none; align-items: center; justify-content: center; z-index: 10; }
+  /* ---------- arm offline: the simulation clip, always labeled as one ---------- */
+  #sim { position: absolute; inset: 0; background: #111; display: none; align-items: center; justify-content: center; z-index: 90; }
   .sim-on #sim { display: flex; }
   #sim video { max-width: 100%; max-height: 100%; }
   #sim .label { position: absolute; left: 0; right: 0; top: 0; padding: 14px 0; text-align: center; background: #f2c200; color: #111;
                 font: 800 clamp(28px, 5vw, 64px)/1.1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .22em; }
   #sim .label.foot { top: auto; bottom: 0; }
+  #flash { position: absolute; inset: 0; background: #fffdf8; opacity: 0; pointer-events: none; z-index: 80; }
 
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; transition: none !important; }
-  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 
-<div id="stack"></div>
-<img id="invite" alt="">
-<div id="lane">
+<header id="top">
+  <div class="brand"><i></i><span id="name"></span></div>
+  <ol id="steps"></ol>
+  <div class="meta"><span id="count"></span><span id="clock"></span></div>
+</header>
+
+<section id="desk">
+  <div id="stack"></div>
+  <img id="invite" alt="">
+  <div class="card" id="scan"></div>
+  <div id="cands"></div>
+  <svg id="threads"></svg>
   <div class="card main" id="mine"><div class="area"></div></div>
   <div class="card main" id="theirs"><div class="area"></div>
     <svg class="postmark" viewBox="0 0 150 150">
@@ -115,212 +182,316 @@
       </g>
     </svg>
   </div>
-</div>
-<div id="plate"></div><div id="slit"></div>
+  <div id="notes"><div class="line" id="l1"></div><div class="line" id="l2"></div><div class="line" id="l3"></div></div>
+</section>
 <button class="choice" id="no" aria-label="no"><svg viewBox="0 0 48 48"><path d="M11 11 L37 37 M37 11 L11 37"/></svg></button>
 <button class="choice" id="yes" aria-label="yes"><svg viewBox="0 0 48 48"><path d="M9 26 L20 37 L39 11"/></svg></button>
-<div id="dots"><i></i><i></i><i></i></div>
+
+<aside id="machine"><div class="frame"></div>
+  <div class="mhead"><span id="mname"></span><span id="live"></span></div>
+  <div id="arm"></div>
+  <div id="phase"><span id="phase-k"></span><b id="phase-v"></b></div>
+  <div id="tele"></div>
+</aside>
+
 <div id="flash"></div>
 <div id="sim"><video id="sim-video" muted playsinline loop preload="none"></video>
   <div class="label">SIMULATION</div><div class="label foot">SIMULATION</div></div>
 
-<script>
+<script type="module">
+  /* Every word this screen shows, in one place. These are placeholders: the team rewrites them.
+     No sentence here is written by a model, and the visitor's and stranger's lines are their own. */
+  const LABELS = {
+    name: 'HAND-ME-DOWN', machine: 'SO-101 FOLLOWER', live: 'LIVE', offline: 'OFFLINE',
+    steps: {read: 'READ', match: 'MATCH', write: 'WRITE', deliver: 'DELIVER'},
+    waiting: n => `${n} WAITING`, delivered: n => `${n} DELIVERED`,
+    reading: 'READING HANDWRITING', read: (n, s) => `READ  <b>${n}</b> WORDS${s != null ? `  <b>${s.toFixed(1)}</b> S` : ''}`,
+    comparing: n => `COMPARING WITH <b>${n}</b> CARDS`,
+    matched: 'MATCHED ON', checked: 'QUOTE FOUND ON CARD', picked: s => `PICKED IN <b>${s}</b> S`, rule: 'PICKED BY RULE',
+    pen: 'PEN', delivered_at: (t, d) => `DELIVERED <b>${t}</b>  TOOK <b>${d}</b>`, returned: 'RETURNED TO THE STACK',
+    phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
+  };
+
   const $ = id => document.getElementById(id);
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ease = 'cubic-bezier(.45, 0, .2, 1)';
-  let cur = {stage: null}, seen = null, clockOffset = 0, theirs = null, mineUrl = null, theirsKey = null;
+  const desk = $('desk');
+  const nnn = n => String(n).padStart(3, '0');
+  const mmss = s => s == null ? '–' : Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
+  let cur = {stage: null}, seen = null, clockOffset = 0, theirs = null, mineCard = null, theirsKey = null, mineKey = null, candEls = [];
 
-  /* ---------- drawing a line of handwriting onto a card ---------- */
+  /* ---------- static furniture ---------- */
+  $('name').textContent = LABELS.name; $('mname').textContent = LABELS.machine;
+  $('steps').innerHTML = Object.entries(LABELS.steps).map(([k, v], i) => `<li data-s="${k}">0${i + 1} ${v}</li>`).join('');
+  $('tele').innerHTML = LABELS.joints.map(([j, n, k]) => `<div>${j} ${n}<b id="t-${k}">–</b><div class="gauge"><i id="g-${k}"></i></div></div>`).join('');
+  $('phase-k').textContent = LABELS.phase;
+  setInterval(() => { const d = new Date(Date.now() + clockOffset * 1000); $('clock').textContent = d.toTimeString().slice(0, 8); }, 250);
+
+  /* ---------- where things sit on the desk (desk-relative, in px) ---------- */
+  const D = () => desk.getBoundingClientRect();
+  const vw = v => v * innerWidth / 100, vh = v => v * innerHeight / 100;
+  function place(el, x, y, r = 0) { el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.setProperty('--r', r + 'deg'); }
+  const CENTER = () => [D().width / 2, vh(36)];
+  const CORNER = () => [vw(9), vh(9)];
+
+  /* ---------- a line of handwriting on a card ---------- */
   function rng(seed) { let s = (seed * 9301 + 49297) % 233280 || 1; return () => (s = (s * 9301 + 49297) % 233280) / 233280; }
-
-  function underlinePath(m, W, H, r) {
-    const [l, t, w, h] = m, wordH = h * H;
-    const x0 = (l - 0.008) * W, x1 = (l + w + 0.01) * W, y = (t + h) * H + 0.06 * wordH;
-    const pts = [];
-    for (let i = 0; i <= 4; i++) pts.push([x0 + (x1 - x0) * i / 4, y + (r() - .5) * 0.09 * wordH - (i / 4) * 0.07 * wordH]);
+  function underline(m, W, H, r) {
+    const [l, t, w, h] = m, wh = h * H, x0 = (l - .008) * W, x1 = (l + w + .01) * W, y = (t + h) * H + .07 * wh, pts = [];
+    for (let i = 0; i <= 4; i++) pts.push([x0 + (x1 - x0) * i / 4, y + (r() - .5) * .09 * wh - (i / 4) * .07 * wh]);
     let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-    for (let i = 1; i < pts.length; i++) {
-      const [px, py] = pts[i - 1], [x, yy] = pts[i];
-      d += ` Q${((px + x) / 2).toFixed(1)},${((py + yy) / 2 + (r() - .5) * 0.05 * wordH).toFixed(1)} ${x.toFixed(1)},${yy.toFixed(1)}`;
-    }
-    return {d, width: Math.max(2, 0.07 * wordH)};
+    for (let i = 1; i < pts.length; i++) { const [px, py] = pts[i - 1], [x, yy] = pts[i]; d += ` Q${((px + x) / 2).toFixed(1)},${((py + yy) / 2 + (r() - .5) * .05 * wh).toFixed(1)} ${x.toFixed(1)},${yy.toFixed(1)}`; }
+    return {d, w: Math.max(2, .065 * wh)};
   }
+  function svgEl(tag, attrs, parent) { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; }
 
-  function fillCard(el, url, size, rows, marks, seed) {
-    const area = el.querySelector('.area');
-    area.innerHTML = '';
+  function fillCard(el, url, size, opts = {}) {
+    const area = el.querySelector('.area'); area.innerHTML = '';
     if (!url) return null;
     const W = size ? size[0] : 1000, H = size ? size[1] : 430;
-    const box = document.createElement('div');
-    box.className = 'inkbox';
-    box.style.setProperty('--ar', W / H);
+    const box = document.createElement('div'); box.className = 'inkbox'; box.style.setProperty('--ar', W / H);
     const full = new Image(); full.className = 'full'; full.src = url; full.alt = ''; box.appendChild(full);
-    const R = rows && rows.length ? rows : [[0, 0, 1, 1]];
+    const R = opts.rows && opts.rows.length ? opts.rows : [[0, 0, 1, 1]];
     const bands = R.map((r, i) => [i ? (R[i - 1][3] + r[1]) / 2 : 0, i < R.length - 1 ? (r[3] + R[i + 1][1]) / 2 : 1]);
     const rowEls = R.map(() => { const im = new Image(); im.className = 'row'; im.src = url; im.alt = ''; box.appendChild(im); return im; });
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'under'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio', 'none');
-    const r = rng(seed || 7);
-    const markEls = (marks || []).map(m => {
-      const {d, width} = underlinePath(m, W, H, r);
-      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      p.setAttribute('d', d); p.setAttribute('pathLength', '1'); p.setAttribute('stroke-width', width.toFixed(1));
-      svg.appendChild(p);
-      const mid = m[1] + m[3] / 2;
-      const row = Math.max(0, bands.findIndex(([a, b]) => mid >= a && mid <= b));
-      const x0 = R[row][0];
-      return {p, row, at: Math.min(1, (m[0] + m[2] - x0) / Math.max(1e-3, 1 - x0))};
-    });
-    box.appendChild(svg);
-    const nib = document.createElement('div'); nib.className = 'nib'; box.appendChild(nib);
+    const out = {box, full, rowEls, bands, R, markEls: [], boxEls: [], W, H};
+    if (opts.words && opts.words.length) {            // the read: a pencil box around every word
+      const g = svgEl('svg', {class: 'boxes', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none'}, box);
+      opts.words.forEach(([l, t, w, h], i) => {
+        const rect = svgEl('rect', {x: l * W, y: t * H, width: w * W, height: h * H, rx: 4, pathLength: 1, 'stroke-width': Math.max(1.5, .012 * H)}, g);
+        const tx = svgEl('text', {x: l * W + 3, y: t * H - 5}, g); tx.textContent = String(i + 1).padStart(2, '0');
+        out.boxEls.push([rect, tx]);
+      });
+    }
+    if (opts.marks && opts.marks.length) {             // the quote: a red line drawn under it, by hand
+      const g = svgEl('svg', {class: 'under', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none'}, box);
+      const r = rng(opts.seed || 7);
+      opts.marks.forEach(m => {
+        const {d, w} = underline(m, W, H, r), p = svgEl('path', {d, pathLength: 1, 'stroke-width': w.toFixed(1)}, g);
+        const mid = m[1] + m[3] / 2, row = Math.max(0, bands.findIndex(([a, b]) => mid >= a && mid <= b)), x0 = R[row][0];
+        out.markEls.push({p, row, m, at: Math.min(1, (m[0] + m[2] - x0) / Math.max(1e-3, 1 - x0))});
+      });
+    }
+    out.nib = document.createElement('div'); out.nib.className = 'nib'; box.appendChild(out.nib);
     area.appendChild(box);
-    return {box, full, rowEls, bands, R, markEls, nib};
+    return out;
   }
-
-  /* reveal the stranger's line row by row, in time with the arm (p from 0 to 1) */
   function reveal(c, p) {
     if (!c) return;
     const widths = c.R.map(r => 1 - r[0]), total = widths.reduce((a, b) => a + b, 0) || 1;
-    let left = p * total, active = -1;
+    let left = p * total, active = false;
     c.R.forEach((r, i) => {
       const f = Math.max(0, Math.min(1, left / widths[i])); left -= widths[i];
-      const edge = r[0] + f * (1 - r[0]);
-      const [top, bottom] = c.bands[i];
+      const edge = r[0] + f * (1 - r[0]), [top, bottom] = c.bands[i];
       c.rowEls[i].style.clipPath = `inset(${(top * 100).toFixed(2)}% ${((1 - edge) * 100).toFixed(2)}% ${((1 - bottom) * 100).toFixed(2)}% 0)`;
-      if (f > 0 && f < 1 && active < 0) { active = i; c.nib.style.left = (edge * 100) + '%'; c.nib.style.top = ((r[1] + r[3]) / 2 * 100) + '%'; }
+      if (f > 0 && f < 1 && !active) { active = true; c.nib.style.left = edge * 100 + '%'; c.nib.style.top = (r[1] + r[3]) / 2 * 100 + '%'; }
       c.markEls.filter(m => m.row === i && f >= m.at).forEach(m => m.p.classList.add('on'));
     });
-    c.nib.style.display = active < 0 ? 'none' : 'block';
+    c.nib.style.visibility = active ? 'visible' : 'hidden';
+  }
+  const finish = c => { if (c) { c.box.classList.remove('revealing'); c.markEls.forEach(m => m.p.classList.add('on')); } };
+
+  /* ---------- notes under the card ---------- */
+  function note(id, html, cls = '') { const el = $(id); el.className = 'line ' + cls; el.innerHTML = html; requestAnimationFrame(() => el.classList.add('on')); return el; }
+  const clearNotes = () => ['l1', 'l2', 'l3'].forEach(id => { $(id).className = 'line'; $(id).innerHTML = ''; });
+  function typeOut(id, text, after = 0) {
+    const el = note(id, '<span class="typed"></span>'), span = el.querySelector('.typed');
+    if (reduce) { span.textContent = `“${text}”`; span.classList.add('done'); return; }
+    let i = 0; const full = `“${text}”`;
+    setTimeout(function step() { span.textContent = full.slice(0, ++i); if (i < full.length) setTimeout(step, 38 + Math.random() * 40); else span.classList.add('done'); }, after);
   }
 
-  function finish(c) {
-    if (!c) return;
-    c.box.classList.remove('revealing');
-    c.markEls.forEach(m => m.p.classList.add('on'));
-  }
-
-  /* ---------- moving cards: physical, slow, and skipped for reduced motion ---------- */
-  const pose = (y, s = 1, tilt = 'var(--tilt)') => `translate(-50%, ${y}) rotate(${tilt}) scale(${s})`;
-  function play(el, frames, ms, e = ease) {
+  /* ---------- moving cards ---------- */
+  function play(el, frames, ms, easing = 'cubic-bezier(.45, 0, .2, 1)') {
     el.getAnimations().forEach(a => a.cancel());
     if (reduce) return Promise.resolve();
-    return el.animate(frames, {duration: ms, easing: e, fill: 'none'}).finished.catch(() => {});
+    return el.animate(frames, {duration: ms, easing}).finished.catch(() => {});
   }
-  const layDown = el => play(el, [{opacity: 0, transform: pose('-53%', 1, '-2.4deg')}, {opacity: 1, transform: pose('-50%')}], 900, 'cubic-bezier(.2, .7, .2, 1)');
-  const intoSlot = el => play(el, [{transform: pose('-50%')}, {transform: pose('-44%', .66, '0deg'), offset: .3}, {transform: pose('70vh', .66, '0deg')}], 1700);
-  const outOfSlot = el => play(el, [{transform: pose('70vh', .66, '0deg')}, {transform: pose('-46%', .66, '0deg'), offset: .62}, {transform: pose('-50%')}], 1800, 'cubic-bezier(.25, .6, .3, 1)');
-
-  function stamp(el, postmark) {
-    postmark.classList.remove('landed');
-    if (reduce) { postmark.classList.add('landed'); return; }
-    postmark.animate([{opacity: 0, transform: 'rotate(-17deg) scale(1.9)'}, {opacity: 1, transform: 'rotate(-9deg) scale(.93)', offset: .55},
-                      {transform: 'rotate(-9deg) scale(1.03)', offset: .74}, {opacity: .9, transform: 'rotate(-9deg) scale(1)'}],
-                     {duration: 560, easing: 'cubic-bezier(.3, 0, .4, 1)'}).finished.then(() => postmark.classList.add('landed')).catch(() => {});
-    el.animate([{transform: pose('-50%'), offset: 0}, {transform: pose('-50%'), offset: .52}, {transform: pose('-49.1%', .994), offset: .62},
-                {transform: pose('-50.25%'), offset: .8}, {transform: pose('-50%')}], {duration: 620, easing: 'ease-out'});
+  const T = (s = 1, r = 'var(--r)') => `translate(-50%, -50%) rotate(${r}) scale(${s})`;
+  function moveTo(el, [x, y], r, width, ms = 900) {
+    const from = el.getBoundingClientRect(), d = D();
+    el.style.width = width; place(el, x, y, r);
+    const to = el.getBoundingClientRect();
+    if (reduce || !from.width) return Promise.resolve();
+    const dx = (from.left + from.width / 2) - (to.left + to.width / 2), dy = (from.top + from.height / 2) - (to.top + to.height / 2);
+    return play(el, [{transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(var(--r)) scale(${from.width / to.width})`}, {transform: T()}], ms);
   }
-
-  function postmarkText(p) {
-    const mins = s => s == null ? '' : Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
-    $('pm-a').textContent = p.written_at || '';
-    $('pm-b').textContent = (String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || [''])[0];
-    $('pm-c').textContent = mins(p.duration_s);
+  function stamp(el) {
+    const pm = el.querySelector('.postmark'); pm.classList.remove('landed');
+    if (reduce) { pm.classList.add('landed'); return; }
+    pm.animate([{opacity: 0, transform: 'rotate(-17deg) scale(1.9)'}, {opacity: 1, transform: 'rotate(-9deg) scale(.93)', offset: .55},
+                {transform: 'rotate(-9deg) scale(1.03)', offset: .74}, {opacity: .92, transform: 'rotate(-9deg) scale(1)'}],
+               {duration: 560, easing: 'cubic-bezier(.3, 0, .4, 1)'}).finished.then(() => pm.classList.add('landed')).catch(() => {});
+    el.animate([{transform: T(), offset: 0}, {transform: T(), offset: .52}, {transform: `translate(-50%, -48.8%) rotate(var(--r)) scale(.994)`, offset: .62},
+                {transform: `translate(-50%, -50.3%) rotate(var(--r))`, offset: .8}, {transform: T()}], {duration: 620, easing: 'ease-out'});
   }
 
-  /* ---------- the idle stack ---------- */
-  const SPOTS = [[0, 1, -2.5], [-15, -5, 6], [14, -7, -5], [-9, 10, -8], [12, 9, 4], [-24, 4, -11], [24, 2, 9]];
+  /* ---------- threads between cards ---------- */
+  const threads = $('threads');
+  function anchor(el, fx, fy) { const r = el.getBoundingClientRect(), d = D(); return [r.left - d.left + r.width * fx, r.top - d.top + r.height * fy]; }
+  function curve([x0, y0], [x1, y1], bend = .25) { const mx = (x0 + x1) / 2, my = (y0 + y1) / 2 - Math.abs(x1 - x0) * bend; return `M${x0},${y0} Q${mx},${my} ${x1},${y1}`; }
+  let threadMode = null;
+  function drawThreads() {
+    threads.innerHTML = '';
+    const mine = $('mine');
+    if (threadMode === 'seek' && mine.classList.contains('shown')) {
+      candEls.forEach(c => svgEl('path', {class: 'seek', d: curve(anchor(mine, .5, 1), anchor(c, .5, 0), -.05)}, threads));
+    }
+    if (threadMode === 'bond' && theirs && mine.classList.contains('shown') && $('theirs').classList.contains('shown')) {
+      const m = theirs.markEls[0];
+      if (m) {
+        const r = theirs.box.getBoundingClientRect(), d = D();
+        const target = [r.left - d.left + (m.m[0] + .02) * r.width, r.top - d.top + (m.m[1] + m.m[3]) * r.height];
+        const p = svgEl('path', {class: 'bond', d: curve(anchor(mine, .92, .75), target, .18), pathLength: 1}, threads);
+        if (m.p.classList.contains('on')) p.classList.add('on');
+      }
+    }
+  }
+
+  /* ---------- idle stack ---------- */
+  const SPOTS = [[0, 0, -3], [-12, -6, 6], [12, -9, -5], [-17, 9, -9], [15, 8, 4], [-3, -14, 8], [4, 13, -2]];
   let stackEls = [], stackSig = '';
   async function loadStack() {
-    let data;
-    try { data = await (await fetch('/stack.json', {cache: 'no-store'})).json(); } catch (e) { return; }
+    let data; try { data = await (await fetch('/stack.json', {cache: 'no-store'})).json(); } catch (e) { return; }
+    $('count').textContent = `${LABELS.waiting(data.waiting ?? 0)}   ${LABELS.delivered(data.delivered ?? 0)}`;
     const inv = $('invite');
-    if (data.invitation) { inv.src = data.invitation + '?v=' + Date.now(); inv.classList.add('shown'); } else inv.classList.remove('shown');
-    const cards = data.cards.slice(0, 6);
-    const sig = cards.map(c => c.no).join(',') + '|' + !!data.invitation;
+    if (data.invitation) { inv.src = data.invitation; inv.classList.add('shown'); } else inv.classList.remove('shown');
+    const cards = data.cards.slice(0, 6), sig = cards.map(c => c.no).join(',') + '|' + !!data.invitation;
     if (sig === stackSig) return;
     stackSig = sig;
     const stack = $('stack'); stack.innerHTML = '';
     const items = cards.map(c => ({url: c.ink, size: c.size, no: c.no}));
-    while (items.length < 3) items.push({url: null});              // blank cards, waiting for someone
-    stackEls = items.map(it => {
-      const el = document.createElement('div'); el.className = 'card';
-      el.innerHTML = '<div class="area"></div>';
-      stack.appendChild(el);
-      if (it.url) fillCard(el, it.url, it.size, null, null, it.no);
-      return el;
-    });
-    layoutStack(!!data.invitation);
+    while (items.length < 3) items.push({url: null});
+    stackEls = items.map(it => { const el = document.createElement('div'); el.className = 'card'; el.innerHTML = '<div class="area"></div>'; stack.appendChild(el); if (it.url) fillCard(el, it.url, it.size); return el; });
+    layoutStack();
   }
-  function layoutStack(hasInvite = $('invite').classList.contains('shown')) {
-    const base = hasInvite ? 61 : 50;
-    stackEls.forEach((el, i) => {
-      const [dx, dy, r] = SPOTS[i % SPOTS.length];
-      el.style.left = `calc(50vw + ${dx}vw)`; el.style.top = `${base + dy}vh`;
-      el.style.setProperty('--r', r + 'deg'); el.style.zIndex = 50 - i;
-    });
+  function layoutStack() {
+    const [cx] = CENTER(), cy = $('invite').classList.contains('shown') ? vh(48) : vh(40);
+    stackEls.forEach((el, i) => { const [dx, dy, r] = SPOTS[i % SPOTS.length]; place(el, cx + vw(dx), cy + vh(dy), r); el.style.zIndex = 50 - i; });
   }
-  function shuffle() {
+  setInterval(() => {
     if (reduce || stackEls.length < 2 || !document.body.classList.contains('stage-idle')) return;
-    const top = stackEls[0];
-    top.classList.add('lift');
+    const top = stackEls[0]; top.classList.add('lift');
     setTimeout(() => { stackEls.push(stackEls.shift()); top.classList.remove('lift'); layoutStack(); }, 900);
-  }
-  setInterval(shuffle, 11000);
+  }, 9000);
 
-  /* ---------- what each stage looks like, and how we get there ---------- */
+  /* ---------- the stage machine ---------- */
+  function steps(now) {
+    const order = ['read', 'match', 'write', 'deliver'];
+    const at = {reading: 0, confirm: 0, choosing: 1, card: 1, writing: 2, held: 2, delivered: 3}[now];
+    document.querySelectorAll('#steps li').forEach((li, i) => {
+      li.className = at == null ? '' : i < at || (now === 'delivered' && i === 3) ? 'done' : i === at ? 'now' : '';
+    });
+  }
+
   function onState(prev, s) {
     const was = prev.stage, now = s.stage, mine = $('mine'), theirsEl = $('theirs');
     document.body.className = 'stage-' + now + (s.sim ? ' sim-on' : '');
+    steps(now);
     const clip = $('sim-video');
     if (s.sim && clip.paused) { if (!clip.src) clip.src = '/sim.mp4'; clip.currentTime = 0; clip.play().catch(() => {}); }
     if (!s.sim && !clip.paused) clip.pause();
+    loadStack();
 
-    if (now === 'idle' || now === 'card') loadStack();
-    if (now === 'reading' && was !== 'reading' && !reduce) $('flash').animate([{opacity: 0}, {opacity: .7, offset: .15}, {opacity: 0}], {duration: 700});
-
-    // the visitor's card: laid down to confirm, then posted through the slot
-    if (now === 'confirm') {
-      if (mineUrl !== s.visitor) { fillCard(mine, s.visitor, s.visitor_size, null, null, 1); mineUrl = s.visitor; }
-      mine.classList.add('shown');
-      if (was !== 'confirm') layDown(mine);
-    } else if (mine.classList.contains('shown')) {
-      if (was === 'confirm' && ['choosing', 'card', 'writing', 'held'].includes(now)) intoSlot(mine).then(() => mine.classList.remove('shown'));
-      else mine.classList.remove('shown');
+    if (now === 'reading') {
+      place($('scan'), ...CENTER(), 0); clearNotes(); note('l1', LABELS.reading);
+      if (was !== 'reading' && !reduce) $('flash').animate([{opacity: 0}, {opacity: .7, offset: .15}, {opacity: 0}], {duration: 700});
     }
 
-    // the stranger's card: comes up out of the slot, is written, is stamped; goes back if held
+    // the visitor's card: read in front of them, then sent off to be matched
+    if (now === 'confirm') {
+      const key = s.visitor + ':' + s.v;
+      if (mineKey !== s.visitor) {
+        mineCard = fillCard(mine, s.visitor, s.visitor_size, {words: s.visitor_words}); mineKey = s.visitor;
+        mine.style.width = '42vw'; place(mine, ...CENTER(), -.8); mine.classList.add('shown');
+        play(mine, [{opacity: 0, transform: `translate(-50%, -53%) rotate(-2.6deg)`}, {opacity: 1, transform: T()}], 800, 'cubic-bezier(.2, .7, .2, 1)');
+        clearNotes();
+        const boxes = (mineCard && mineCard.boxEls) || [];
+        boxes.forEach(([r, t], i) => setTimeout(() => { r.classList.add('on'); t.classList.add('on'); }, reduce ? 0 : 700 + i * 140));
+        const after = reduce ? 0 : 900 + boxes.length * 140;
+        setTimeout(() => note('l1', LABELS.read((s.visitor_words || []).length, s.visitor_read_secs)), after);
+        if (s.visitor_line) typeOut('l2', s.visitor_line, after + 300);
+      }
+    }
+    if (now === 'choosing' || now === 'card') {
+      if (mine.classList.contains('shown')) moveTo(mine, CORNER(), -3, '16vw', 1000);
+      clearNotes();
+      const cands = (s.candidates || []);
+      $('cands').innerHTML = ''; candEls = [];
+      if (now === 'choosing' && cands.length) {
+        note('l1', LABELS.comparing(cands.length));
+        const d = D(), n = cands.length, span = Math.min(d.width * .86, n * vw(13));
+        cands.forEach((c, i) => {
+          const el = document.createElement('div'); el.className = 'card'; el.dataset.no = c.no;
+          el.innerHTML = `<div class="area"></div><span class="tag">No. ${nnn(c.no)}</span>`;
+          $('cands').appendChild(el); fillCard(el, c.ink, c.size);
+          place(el, d.width / 2 - span / 2 + span * (i + .5) / n, vh(52) + (i % 2 ? vh(3) : 0), [-4, 3, -2, 5, -3, 2][i % 6]);
+          setTimeout(() => el.classList.add('on'), reduce ? 0 : 300 + i * 120);
+          candEls.push(el);
+        });
+        threadMode = 'seek';
+        let k = 0; clearInterval(window.lookTimer);
+        if (!reduce) window.lookTimer = setInterval(() => { candEls.forEach((e, i) => e.classList.toggle('look', i === k % candEls.length)); k++; }, 420);
+      }
+      if (now === 'card') threadMode = null;
+    } else { clearInterval(window.lookTimer); }
+
+    // the stranger's card: lifted out of the cards compared, written row by row, stamped
     const key = s.job != null ? `${s.job}:${s.stranger}` : null;
     if (now === 'writing' || now === 'delivered') {
       if (theirsKey !== key) {
-        theirs = fillCard(theirsEl, s.stranger, s.stranger_size, s.rows, (s.marks || {}).stranger, (s.job || 3) * 7 + 3);
+        theirs = fillCard(theirsEl, s.stranger, s.stranger_size, {rows: s.rows, marks: (s.marks || {}).stranger, seed: (s.job || 3) * 7 + 3});
         theirsKey = key;
         theirsEl.querySelector('.postmark').classList.remove('landed');
-        theirsEl.classList.add('shown');
+        const from = candEls.find(c => +c.dataset.no === s.job);
+        theirsEl.style.width = '40vw'; place(theirsEl, D().width / 2 + vw(3), vh(40), .7); theirsEl.classList.add('shown');
         if (theirs && now === 'writing') { theirs.box.classList.add('revealing'); reveal(theirs, 0); }
-        if (was !== null && now === 'writing') {
-          const after = mine.classList.contains('shown') && was === 'confirm' ? 1700 : 0;   // let the visitor's card go first
-          theirsEl.style.opacity = '0';
-          setTimeout(() => { theirsEl.style.opacity = ''; outOfSlot(theirsEl); }, after);
-        }
+        if (from && !reduce) {
+          const a = from.getBoundingClientRect(), b = theirsEl.getBoundingClientRect();
+          play(theirsEl, [{transform: `translate(calc(-50% + ${(a.left + a.width / 2) - (b.left + b.width / 2)}px), calc(-50% + ${(a.top + a.height / 2) - (b.top + b.height / 2)}px)) rotate(var(--r)) scale(${a.width / b.width})`}, {transform: T()}], 1000);
+        } else if (was !== null && now === 'writing') play(theirsEl, [{opacity: 0, transform: `translate(-50%, -46%) rotate(var(--r))`}, {opacity: 1, transform: T()}], 800);
+        candEls.forEach(c => c.classList.remove('on')); setTimeout(() => { $('cands').innerHTML = ''; candEls = []; }, 600);
+        if (mine.classList.contains('shown')) moveTo(mine, CORNER(), -3, '16vw', 600);
+        threadMode = 'bond';
+        clearNotes();
+        if (s.quote) {
+          note('l1', `${LABELS.matched}<span class="typed done">“${s.quote}”</span>`);
+          note('l2', `<span class="ok">✓</span> ${LABELS.checked} <b>${nnn(s.job)}</b>${s.pick_secs != null ? `   ${LABELS.picked(s.pick_secs)}` : ''}`);
+        } else if (s.by && s.by !== 'hermes') note('l1', LABELS.rule);
+        note('l3', `${LABELS.pen} <span class="bar"><i id="penbar"></i></span> <b id="pentime">0:00</b>`);
       }
       if (now === 'delivered') {
         finish(theirs);
-        postmarkText(s.postmark || {});
-        if (was === 'writing') stamp(theirsEl, theirsEl.querySelector('.postmark'));
-        else theirsEl.querySelector('.postmark').classList.add('landed');
+        const p = s.postmark || {};
+        $('pm-a').textContent = p.written_at || ''; $('pm-b').textContent = (String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || [''])[0]; $('pm-c').textContent = mmss(p.duration_s);
+        note('l3', LABELS.delivered_at((String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || ['–'])[0], mmss(p.duration_s)));
+        if (was === 'writing') stamp(theirsEl); else theirsEl.querySelector('.postmark').classList.add('landed');
       }
-    } else if (theirsEl.classList.contains('shown')) {
-      const done = () => { theirsEl.classList.remove('shown'); theirsKey = null; theirs = null; };
-      if (now === 'held') intoSlot(theirsEl).then(done);
-      else play(theirsEl, [{opacity: 1}, {opacity: 0}], 800).then(done);
+    } else {
+      if (theirsEl.classList.contains('shown')) {
+        const done = () => { theirsEl.classList.remove('shown'); theirsKey = null; theirs = null; };
+        if (now === 'held') { note('l3', LABELS.returned); play(theirsEl, [{opacity: 1, transform: T()}, {opacity: 0, transform: `translate(-50%, -40%) rotate(var(--r)) scale(.6)`}], 900).then(done); }
+        else play(theirsEl, [{opacity: 1}, {opacity: 0}], 700).then(done);
+      }
+      if (['idle', 'reading'].includes(now)) {
+        if (mine.classList.contains('shown')) play(mine, [{opacity: 1}, {opacity: 0}], 500).then(() => mine.classList.remove('shown'));
+        mineKey = null; threadMode = null;
+        if (now === 'idle') clearNotes();
+      }
+    }
+    if (now !== 'confirm' && now !== 'choosing' && now !== 'card' && now !== 'writing' && now !== 'delivered' && now !== 'held') {
+      $('cands').innerHTML = ''; candEls = [];
     }
   }
 
   function frame() {
     if (cur.stage === 'writing' && theirs) {
-      const t = Date.now() / 1000 + clockOffset;
-      reveal(theirs, Math.max(0, Math.min(.985, (t - (cur.started || t)) / (cur.est_s || 90))));
+      const t = Date.now() / 1000 + clockOffset, el = t - (cur.started || t), p = Math.max(0, Math.min(.985, el / (cur.est_s || 90)));
+      reveal(theirs, p);
+      const bar = $('penbar'), tm = $('pentime');
+      if (bar) bar.style.width = (p * 100).toFixed(1) + '%';
+      if (tm) tm.textContent = `${mmss(el)} / ${mmss(cur.est_s || 90)}`;
     }
+    if (threadMode) drawThreads(); else if (threads.firstChild) threads.innerHTML = '';
     requestAnimationFrame(frame);
   }
 
@@ -333,12 +504,35 @@
     setTimeout(tick, 350);
   }
 
+  /* ---------- the machine: the live 3D arm, and its joints ---------- */
+  let lastT = null, lastSeen = 0;
+  async function pose() {
+    try {
+      const p = await (await fetch('/pose.json', {cache: 'no-store'})).json();
+      const fresh = p && p.pos && (p.t !== lastT || Date.now() / 1000 + clockOffset - p.t < 2);
+      if (p && p.t !== lastT) { lastT = p.t; lastSeen = Date.now(); }
+      const live = fresh && Date.now() - lastSeen < 2000;
+      $('live').textContent = live ? LABELS.live : LABELS.offline; $('live').className = live ? 'on' : '';
+      $('phase-v').textContent = live && p.phase ? p.phase.toUpperCase() : (cur.stage === 'writing' ? '–' : LABELS.idle);
+      LABELS.joints.forEach(([, , k]) => {
+        const v = live ? p.pos[k] : null;
+        $('t-' + k).textContent = v == null ? '–' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '°';
+        $('g-' + k).style.left = v == null ? '50%' : Math.max(0, Math.min(100, 50 + v / 3.6)) + '%';
+      });
+    } catch (e) {}
+    setTimeout(pose, 250);
+  }
+  try {
+    const { mountArm } = await import('/screen/arm/arm.js');
+    mountArm($('arm'), {sceneUrl: '/screen/arm/scene.json', meshBase: '/sim/so101/assets/', poseUrl: '/pose.json'});
+  } catch (e) { console.error('arm panel', e); }
+
   const answer = yes => fetch('/api/confirm', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({yes})});
   $('yes').onclick = () => answer(true); $('no').onclick = () => answer(false);
   document.addEventListener('keydown', e => { if (cur.stage === 'confirm') { if (e.key === 'y' || e.key === 'Enter') answer(true); if (e.key === 'n') answer(false); } });
+  addEventListener('resize', () => layoutStack());
 
-  loadStack();
-  tick();
-  requestAnimationFrame(frame);
+  loadStack(); tick(); pose(); requestAnimationFrame(frame);
+  setInterval(loadStack, 20000);
 </script>
 </html>
