@@ -137,6 +137,9 @@
 
   /* idle: the loose stack, and the team's own handwriting */
   #stack { position: absolute; inset: 0; transition: opacity .8s; }
+  #stack .card[data-paper="1"] { --card: #f8f1df; }
+  #stack .card[data-paper="2"] { --card: #eef2ee; }
+  #stack .card[data-paper="3"] { --card: #f6e8d6; }
   #stack .card { width: 19vw; transition: left 1.6s ease-in-out, top 1.6s ease-in-out, transform 1.6s ease-in-out, box-shadow 1.6s; }
   #stack .card.lift { transform: translate(-50%, -64%) rotate(calc(var(--r) * 1.5)); box-shadow: 0 .3vh .6vh rgba(70, 50, 30, .14), 0 3vh 4vh -1vh rgba(70, 50, 30, .3); }
   body:not(.stage-idle):not(.stage-card) #stack { opacity: 0; }
@@ -399,8 +402,8 @@
     stackSig = sig;
     const stack = $('stack'); stack.innerHTML = '';
     const items = cards.map(c => ({url: c.ink, size: c.size, no: c.no}));
-    while (items.length < 3) items.push({url: null});
-    stackEls = items.map(it => { const el = document.createElement('div'); el.className = 'card'; el.innerHTML = '<div class="area"></div>'; stack.appendChild(el); if (it.url) fillCard(el, it.url, it.size); return el; });
+    while (!cards.length && items.length < 3) items.push({url: null});   // blanks only when no one has written yet
+    stackEls = items.map(it => { const el = document.createElement('div'); el.className = 'card'; el.innerHTML = '<div class="area"></div>'; if (it.no != null) { el.dataset.paper = it.no % 4; el.style.width = [19, 17.6, 20.2, 18.3][it.no % 4] + 'vw'; } stack.appendChild(el); if (it.url) fillCard(el, it.url, it.size); return el; });
     layoutStack();
   }
   function layoutStack() {
