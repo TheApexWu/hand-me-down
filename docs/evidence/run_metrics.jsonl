@@ -1,0 +1,7 @@
+{"t": "12:51:27", "z": 47.0, "score": {"right": 0.58, "left": 0.88, "away": 0.93, "toward": 0.0}, "offset_mm": [2.0, -2.0], "control": 0.042}
+{"t": "12:51:27", "z": 46.0, "score": {"right": 0.5, "left": 0.96, "away": 0.07, "toward": 0.71}, "offset_mm": [2.0, -2.0], "control": 0.042}
+{"t": "12:51:27", "z": 45.0, "score": {"right": 1.0, "left": 0.79, "away": 0.93, "toward": 0.93}, "offset_mm": [2.0, -2.0], "control": 0.042}
+{"t": "12:51:27", "z": 44.0, "score": {"right": 0.88, "left": 0.54, "away": 0.14, "toward": 0.86}, "offset_mm": [2.0, -2.0], "control": 0.042}
+{"t": "13:01:37", "test": "speed", "k": 0.5, "xy_median": 1.5, "xy_p95": 2.44, "z_p95": 1.41, "shake_p95": 0.39}
+{"t": "13:01:37", "test": "speed", "k": 0.3, "xy_median": 1.45, "xy_p95": 2.22, "z_p95": 1.12, "shake_p95": 0.32}
+{"t": "13:38:37", "ok": true, "job": "990", "press_mm": 3.0, "speed": 1.0, "cap_mm": 16.5, "est_s": 48, "ink_coverage": 0.498, "stray_ink": 0.302, "landed_offset_mm": [0.5, -1.0], "live": true, "seconds": 50.1}

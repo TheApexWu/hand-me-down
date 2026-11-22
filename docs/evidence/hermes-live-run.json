@@ -1,0 +1,34 @@
+{
+  "model_role": "arm driver with five bounded tools",
+  "steps": [
+    {
+      "call": "arm_status",
+      "input": {}
+    },
+    {
+      "result": "arm_status",
+      "error": false,
+      "seconds": 0.1,
+      "output": {
+        "result": "{\"ok\": true, \"live\": true, \"moving\": false, \"max_temp_c\": 48, \"card_ready\": true, \"card\": \"blank card ready\", \"queue\": [\"990\"], \"recent_runs\": []}"
+      }
+    },
+    {
+      "call": "write_job",
+      "input": {
+        "job": "990",
+        "press_mm": 3.0,
+        "speed": 1.0
+      }
+    },
+    {
+      "result": "write_job",
+      "error": false,
+      "seconds": 60.6,
+      "output": {
+        "result": "{\"ok\": true, \"job\": \"990\", \"press_mm\": 3.0, \"speed\": 1.0, \"cap_mm\": 16.5, \"est_s\": 48, \"ink_coverage\": 0.498, \"stray_ink\": 0.302, \"landed_offset_mm\": [0.5, -1.0], \"live\": true, \"seconds\": 50.1}"
+      }
+    }
+  ],
+  "final_message": "Job 990 was written live but did not meet the bar: ink_coverage 0.498 (needs at least 0.50) and stray_ink 0.302 (needs at most 0.30). I left it open and did not finish it.\n\nThe one setting I would change is press_mm, from 3.0 to 3.5, to raise ink coverage. Stray ink is also slightly over, so that change may not clear it, and a person should check the result before the next run. A person needs to load a new card before any retry.\n\nJobs finished: 0. Jobs refused: 0. Jobs left open: 990."
+}
