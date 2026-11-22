@@ -125,6 +125,39 @@ def layout(text):
     raise Refused(f"does not fit in {MAX_LINES} lines at {CAP_MIN:.0f} mm cap height ({len(text)} chars)")
 
 
+def join(strokes, cap):
+    """Keep the pen down through a letter: a stroke that starts on the line just drawn retraces to it."""
+    tol, out, cur = max(0.6, 0.06 * cap), [], None
+    for s in strokes:
+        if cur is None:
+            cur = s.copy()
+            continue
+        a, d = cur[:-1], np.diff(cur, axis=0)
+        t = np.clip(((s[0] - a) * d).sum(1) / np.maximum((d * d).sum(1), 1e-12), 0, 1)
+        near = a + t[:, None] * d
+        gaps = np.linalg.norm(near - s[0], axis=1)
+        i = int(np.argmin(gaps))
+        if gaps[i] <= tol:
+            cur = np.vstack([cur, cur[i + 1:-1][::-1], near[i], s])
+        else:
+            out.append(cur)
+            cur = s.copy()
+    out.append(cur)
+    return out
+
+
+def split_sharp(poly):
+    """Stop at reversals and hard corners with the pen down; carrying speed through them shakes the arm."""
+    poly = poly[np.r_[True, np.linalg.norm(np.diff(poly, axis=0), axis=1) > 1e-6]]
+    if len(poly) < 3:
+        return [poly]
+    u = np.diff(poly, axis=0)
+    u /= np.linalg.norm(u, axis=1)[:, None]
+    cuts = np.flatnonzero((u[:-1] * u[1:]).sum(1) < 0.25) + 1
+    edges = [0, *cuts.tolist(), len(poly) - 1]
+    return [poly[a:b + 1] for a, b in zip(edges, edges[1:])]
+
+
 def knots(poly):
     """About 2 mm IK spacing, but every sharp corner stays a key so letters keep their points."""
     poly = poly[np.r_[True, np.linalg.norm(np.diff(poly, axis=0), axis=1) > 1e-6]]
@@ -235,6 +268,7 @@ class Planner:
 
     def plan(self, text, z):
         strokes, lines, cap = layout(clean(text))
+        strokes = join(strokes, cap)
         world = [np.column_stack([self.cx + s[:, 0] * self.rs + s[:, 1] * self.rc,
                                   self.cy - (s[:, 0] * self.rc - s[:, 1] * self.rs)]) for s in strokes]
         hover_pt = [*world[0][0], HOVER_Z]
@@ -253,7 +287,8 @@ class Planner:
             above = [*xy[0], z + LIFT]
             go([hover_pt, above] if here is None else [here, [*here[:2], z + LIFT], above], TRAVEL, A_TRAVEL)
             go([above, [*xy[0], z]], DESCEND, A_DESCEND)
-            go(np.column_stack([xy, np.full(len(xy), z)]), DRAW, A_DRAW, ink=True)
+            for piece in split_sharp(xy):
+                go(np.column_stack([piece, np.full(len(piece), z)]), DRAW, A_DRAW, ink=True)
             here = [*xy[-1], z]
         go([here, [*here[:2], z + LIFT], [*here[:2], HOVER_Z]], TRAVEL, A_TRAVEL)
         return self.check(np.vstack(chunks), np.concatenate(inks), hover, lines, cap, z, worst)
