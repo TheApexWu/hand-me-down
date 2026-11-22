@@ -48,4 +48,4 @@ if __name__ == "__main__":
     except Exception as exc:  # fail closed
         reason = f"hook error: {exc}"
     if reason:
-        print(json.dumps({"decision": "block", "reason": reason}))
+        print(json.dumps({"action": "block", "message": reason, "decision": "block", "reason": reason}))

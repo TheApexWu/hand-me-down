@@ -6,7 +6,10 @@ that card. The same check also runs earlier, in the pre_tool_call hook
 """
 import json
 
-from mcp.server.mcpserver import MCPServer
+try:  # mcp 2.x
+    from mcp.server.mcpserver import MCPServer
+except ImportError:  # mcp 1.x, as shipped inside some Hermes images
+    from mcp.server.fastmcp import FastMCP as MCPServer
 
 from . import store
 from .quote import judge_give

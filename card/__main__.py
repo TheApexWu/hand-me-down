@@ -5,6 +5,7 @@
   visit FILE [FILE ...]     run whole visits from photos, no confirm step; prints the job and the time
   seed FILE [FILE ...]      put card photos on the rail
   rail                      list the cards
+  hermes up|check|down      the Hermes container that does the choosing (needs OPENROUTER_API_KEY)
   warm [N]                  run N throwaway Hermes turns on made-up cards and time them
   doctor                    check the key, the camera, the layout, Hermes and the body server
 """
@@ -17,7 +18,7 @@ import sys
 import time
 
 from . import layout as lay
-from . import pick, read_card, store, visit
+from . import hermes, pick, read_card, store, visit
 
 
 def cmd_visit(args):
@@ -56,11 +57,22 @@ def cmd_warm(args):
     print("trace:", latest.get("file"))
 
 
+def cmd_hermes(args):
+    if args.action == "up":
+        hermes.up()
+        hermes.check()
+    elif args.action == "check":
+        sys.exit(0 if hermes.check() else 1)
+    else:
+        hermes.down(purge=args.purge)
+        print("removed", hermes.NAME, "and its volume" if args.purge else "(volume kept)")
+
+
 def cmd_doctor(_):
     ok = lambda good, msg: print(("ok   " if good else "FAIL ") + msg)
     ok(bool(os.environ.get("REDUCTO_API_KEY")), "REDUCTO_API_KEY in the environment (or in .env, which is git-ignored)")
     ok(read_card.online(), "network: platform.reducto.ai reachable")
-    ok(read_card.online(pick.PORTAL_HOST), f"network: {pick.PORTAL_HOST} reachable")
+    ok(read_card.online(pick.MODEL_HOST), f"network: {pick.MODEL_HOST} reachable")
     from .capture import find_camera, list_cameras
     try:
         ok(True, f"camera: {find_camera()[1]}")
@@ -70,12 +82,11 @@ def cmd_doctor(_):
     layout = lay.load()
     ok(lay.measured(layout), "card/layout.json measured (python -m card layout)")
     ok(layout["house_line"] != lay.DEFAULT["house_line"], 'house line written by the team ("house_line" in card/layout.json)')
-    exe = pick.HERMES_CMD.split()[0]
-    found = shutil.which(exe)
-    ok(bool(found), f"chooser command: {pick.HERMES_CMD}")
-    if found:
-        v = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=30)
-        print("    ", ((v.stdout or v.stderr).strip().splitlines() or ["?"])[0])
+    ok(bool(os.environ.get("OPENROUTER_API_KEY")), "OPENROUTER_API_KEY in the environment")
+    if pick.HERMES_CMD:
+        ok(bool(shutil.which(pick.HERMES_CMD.split()[0])), f"chooser command (HMD_HERMES_CMD): {pick.HERMES_CMD}")
+    else:
+        ok(hermes.running(), f"Hermes container {hermes.NAME} running ({hermes.IMAGE}, model {hermes.MODEL})")
     probe = subprocess.run([sys.executable, "-c", "import card.body_server"], capture_output=True, text=True, cwd=store.ROOT)
     ok(probe.returncode == 0, "body server imports" + ("" if probe.returncode == 0 else ": " + probe.stderr[-300:]))
     print(f"     mode: {layout['mode']}   waiting on the rail: {len(store.waiting())}")
@@ -95,6 +106,7 @@ def main():
     sd = sub.add_parser("seed"); sd.add_argument("files", nargs="+"); sd.set_defaults(fn=cmd_seed)
     sub.add_parser("rail").set_defaults(fn=cmd_rail)
     w = sub.add_parser("warm"); w.add_argument("n", type=int, nargs="?", default=1); w.set_defaults(fn=cmd_warm)
+    h = sub.add_parser("hermes"); h.add_argument("action", choices=["up", "check", "down"]); h.add_argument("--purge", action="store_true"); h.set_defaults(fn=cmd_hermes)
     sub.add_parser("doctor").set_defaults(fn=cmd_doctor)
     args = p.parse_args()
     if args.cmd in ("serve", "layout"):

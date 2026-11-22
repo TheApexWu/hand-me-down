@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_env():
-    """Read ROOT/.env (git-ignored) into os.environ without overriding what's already set."""
+    """Read ROOT/.env (git-ignored) into os.environ. What .env defines wins over the shell:
+    it is this project's own file, and a stale key exported from a shell profile shouldn't beat it."""
     env = ROOT / ".env"
     if not env.exists():
         return
@@ -25,7 +26,7 @@ def load_env():
             continue
         key, value = line.split("=", 1)
         value = value.strip().strip('"').strip("'")
-        if value and not os.environ.get(key.strip()):
+        if value:
             os.environ[key.strip()] = value
 
 
