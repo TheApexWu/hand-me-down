@@ -123,3 +123,10 @@ def test_end_marks_are_not_inked(card_photo):
     visit.run(file=card_photo("s", "x"), seed=True, call=reducto_says("Don't Give Up!!"))
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("I feel lost"), is_online=False)
     assert job["quote"] == "Don't Give Up" and job["line"] == "Don't Give Up!!"
+
+
+def test_hermes_still_chooses_when_only_one_card_is_waiting(card_photo, monkeypatch):
+    visit.run(file=card_photo("s", "x"), seed=True, call=reducto_says("Keep Going!!"))
+    monkeypatch.setattr(pick, "HERMES_CMD", FAKE + "'" + json.dumps([["001", "Keep Going!!"]]) + "'")
+    _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("I feel lost and left behind"), is_online=True)
+    assert job["picked_by"] == "hermes" and job["card_no"] == 1 and job["quote"] == "Keep Going"

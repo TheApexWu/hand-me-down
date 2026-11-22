@@ -166,8 +166,6 @@ def choose(visitor, exclude=(), cmd=None, is_online=None):
         return out(None, "rule", "nothing is waiting: house line")
     if not visitor_line:
         return out(oldest, "rule", "the visitor's card could not be read")
-    if len(candidates) == 1:
-        return out(oldest, "rule", "only one card is waiting")
 
     got = ask(visitor_line, lines, cmd=cmd, visitor_no=visitor["card_no"])
     if got["card"]:
