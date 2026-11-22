@@ -138,6 +138,9 @@ def done(n):
     return store.read_json(done_file(n))
 
 
+NOT_CLEAR = "no clear blank card on the box"   # sim/arm_worker.py: the box was not ready, the card is fine
+
+
 def delivered(reply):
     """True only for a reply that says the arm wrote the job. A refusal is a reply too, and is never this."""
     return bool(reply) and not reply.get("refused")

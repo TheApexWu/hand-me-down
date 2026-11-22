@@ -3,7 +3,7 @@ import json
 import sys
 import time
 
-from card import fake_arm, pick, server, store
+from card import fake_arm, jobs, pick, server, store, visit
 from card.tests.conftest import reducto_says
 
 FAKE = f"{sys.executable} -c \"import sys,json; from card.body_server import give; [print(give(c,q)) for c,q in json.loads(sys.argv[1])]\" "
@@ -117,8 +117,40 @@ def test_a_card_nobody_could_read_gets_no_reply(card_photo, site, monkeypatch):
     state = wait_for("idle", site)
     for _ in range(100):
         state = json.loads(site.get("/state.json")[1])
-        if state.get("unread"):
+        if state.get("notice") == "unread":
             break
         time.sleep(0.03)
-    assert state.get("unread") and not list(store.folder("jobs").glob("[0-9]*.json"))
+    assert state.get("notice") == "unread" and not list(store.folder("jobs").glob("[0-9]*.json"))
     assert [c["card_no"] for c in store.waiting()] == [1]
+
+
+def wait_notice(site, want):
+    for _ in range(150):
+        state = json.loads(site.get("/state.json")[1])
+        if state.get("notice") == want:
+            return state
+        time.sleep(0.03)
+    raise AssertionError(f"no {want!r} notice; the screen shows {state}")
+
+
+def test_no_clear_card_keeps_the_reply_and_frees_the_button(card_photo, site, monkeypatch):
+    monkeypatch.setattr(server, "DEMO_HOLD_S", 0.05)
+    site.capture(card_photo("a", "Keep Going!!"), "Keep Going!!", seed=True)
+    monkeypatch.setattr(pick, "HERMES_CMD", FAKE + "'" + json.dumps([["001", "Keep Going!!"]] * 2) + "'")
+    site.app.reducto_call = reducto_says("I feel lost and left behind")
+    assert site.call("/api/next", body={"file": str(card_photo("v", "v"))})[0] == 200
+    wait_for("writing", site)
+    store.write_json(jobs.done_file(1), {"refused": jobs.NOT_CLEAR, "delivered_at": None, "duration_s": None})
+    assert wait_notice(site, "blank")["stage"] == "idle"
+    assert [c["card_no"] for c in store.waiting()] == [1] and not jobs.job_file(1).exists()
+    site.app.reducto_call = reducto_says("I feel lost and left behind again")
+    assert site.call("/api/next", body={"file": str(card_photo("w", "w"))})[0] == 200
+    assert wait_for("writing", site)["quote"] == "Keep Going"
+
+
+def test_a_card_the_gate_holds_tells_the_operator_on_screen(card_photo, site, monkeypatch):
+    site.capture(card_photo("a", "Keep Going!!"), "Keep Going!!", seed=True)
+    monkeypatch.setattr(visit, "screen", lambda card: {"hold": True, "reasons": ["threat"]})
+    site.app.reducto_call = reducto_says("a line the gate holds")
+    assert site.call("/api/next", body={"file": str(card_photo("v", "v"))})[0] == 200
+    assert wait_notice(site, "person")["stage"] == "idle" and not jobs.job_file(1).exists()

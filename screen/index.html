@@ -151,7 +151,7 @@
   /* ---------- the machine ---------- */
   #next { position: absolute; left: 3vw; bottom: 4vh; z-index: 60; padding: 1.5vh 2.6vh; border: 0; border-radius: .4vh; background: var(--ink); color: #fffdf8; font: 600 1.6vh var(--mono); letter-spacing: .16em; cursor: pointer; }
   #next:disabled { opacity: .45; cursor: default; }
-  body:not(.stage-idle):not(.stage-card):not(.stage-delivered) #next { display: none; }
+  body:not(.stage-idle):not(.stage-card):not(.stage-delivered):not(.stage-held) #next { display: none; }
   #machine { position: absolute; right: 3vw; top: 11vh; width: 33vw; height: 80vh; }
   #machine .frame { position: absolute; inset: 0; border: .12vh solid var(--faint); }
   #machine .frame::before, #machine .frame::after { content: ""; position: absolute; width: 2.2vh; height: 2.2vh; border: .3vh solid var(--ink); }
@@ -242,7 +242,7 @@
     house: 'FROM THE HOUSE',
     archive: 'ARCHIVE', archive_line: src => `FROM THE ARCHIVE${src ? `  <b>${src}</b>` : ''}`, archived: n => `${n} ARCHIVE`,
     pen: 'PEN', delivered_at: (t, d) => `DELIVERED <b>${t}</b>  TOOK <b>${d}</b>`, returned: 'RETURNED TO THE STACK',
-    next: 'NEXT CARD', unread: 'COULD NOT READ THAT CARD. LAY IT FLAT AND PRESS AGAIN', camera: 'LIVE CAMERA', phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
+    next: 'NEXT CARD', notices: {unread: 'COULD NOT READ THAT CARD. LAY IT FLAT AND PRESS AGAIN', blank: 'PUT A CLEAN BLANK CARD ON THE BOX AND PRESS AGAIN', person: 'A PERSON NEEDS TO READ THIS CARD'}, camera: 'LIVE CAMERA', phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
   };
 
   const $ = id => document.getElementById(id);
@@ -433,7 +433,6 @@
     const was = prev.stage, now = s.stage, env = $('env'), theirsEl = $('theirs');
     document.body.className = 'stage-' + now + (s.sim ? ' sim-on' : '');
     steps(now);
-    if (now === 'idle') { clearNotes(); if (s.unread) note('l1', LABELS.unread); }
     const clip = $('sim-video');
     if (s.sim && clip.paused) { if (!clip.src) clip.src = '/sim.mp4'; clip.currentTime = 0; clip.play().catch(() => {}); }
     if (!s.sim && !clip.paused) clip.pause();
@@ -515,7 +514,7 @@
       if (env.classList.contains('shown')) play(env, [{opacity: 1}, {opacity: 0}], 500).then(() => env.classList.remove('shown'));
       threadMode = null;
       $('cands').innerHTML = ''; candEls = [];
-      if (now === 'idle') clearNotes();
+      if (now === 'idle') { clearNotes(); if (LABELS.notices[s.notice]) note('l1', LABELS.notices[s.notice]); }
     }
   }
 
