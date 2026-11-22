@@ -5,6 +5,8 @@
 """
 import argparse
 import json
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -70,15 +72,32 @@ def setup(root):
             sys.exit("profile create failed: " + (made.stdout + made.stderr)[-500:])
     (PROFILE_DIR / "config.yaml").write_text(CONFIG.format(python=ROOT / ".venv/bin/python", server=HERE / "arm_mcp.py",
                                                            root=root, tools=json.dumps(TOOLS)))
+    subprocess.run([HERMES, "gateway", "stop"], capture_output=True, text=True, timeout=30)   # it caches profile config
+    clear_servers()
     print("profile ready:", PROFILE, "| job root:", root)
+
+
+def clear_servers():
+    """A tool server left by an earlier turn keeps its old job folder, so Hermes would see the wrong queue."""
+    exact = f"{ROOT / '.venv/bin/python'} -B {HERE / 'arm_mcp.py'}"
+    for row in subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True).stdout.splitlines():
+        pid, _, command = row.strip().partition(" ")
+        if command.strip() == exact:
+            os.kill(int(pid), signal.SIGTERM)
+            print("stopped stale arm tool server", pid)
 
 
 def run():
     log = ROOT / "runs" / f"{time.strftime('%Y%m%d-%H%M%S')}-hermes-arm.jsonl"
-    with open(log, "wb") as out:
-        p = subprocess.run([HERMES, "-p", PROFILE, "chat", "--query-file", "-", "-Q", "--format", "stream-json",
-                            "--max-turns", "14", "-t", "mcp-hand"], input=PROMPT.encode(), stdout=out,
-                           stderr=subprocess.STDOUT, timeout=420)
+    clear_servers()
+    time.sleep(0.3)
+    try:
+        with open(log, "wb") as out:
+            p = subprocess.run([HERMES, "-p", PROFILE, "chat", "--query-file", "-", "-Q", "--format", "stream-json",
+                                "--max-turns", "14", "-t", "mcp-hand"], input=PROMPT.encode(), stdout=out,
+                               stderr=subprocess.STDOUT, timeout=420)
+    finally:
+        clear_servers()
     print("hermes rc", p.returncode, "| transcript", log)
     return p.returncode
 

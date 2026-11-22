@@ -1,6 +1,6 @@
 # Arm Status
 
-Updated Sun 22 Nov 2026, 13:31. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
+Updated Sun 22 Nov 2026, 13:39. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
 
 ## Working
 
@@ -29,7 +29,7 @@ For the arm-offline switch: `git show origin/alex/arm-pen:docs/hand-me-down-sim-
 
 ## Hermes drives the arm
 
-Status: built and tested in dry mode, not yet run on the real arm. `sim/arm_mcp.py` holds the tools and `sim/hermes_drive.py` runs one pass.
+Status: first supervised live run done. Hermes wrote "Lorem ipsum" on the real arm in 50 s at a 16.5 mm letter height. It scored 0.498 ink coverage and 0.302 stray ink, narrowly missed the pass line, and correctly left the job open. `sim/arm_mcp.py` holds the tools and `sim/hermes_drive.py` runs one pass.
 
 - **Two Hermes roles.** The chooser stays on the card laptop, reads card text and has only `give`. A separate `arm` profile on Alex's laptop runs the arm. It sees job numbers and measurements, and never receives card text, so a hostile card cannot steer it.
 - **Arm tools:** `arm_status`, `write_job(job, press_mm, speed)`, `finish_job(job, note)`, `refuse_job(job, reason)`, `stop_arm`.
@@ -37,7 +37,7 @@ Status: built and tested in dry mode, not yet run on the real arm. `sim/arm_mcp.
 - **Feedback loop:** after each write, the webcam scores ink along the planned path. Hermes sees recent runs and chooses the next press and speed inside those limits.
 - **Dry test:** one real Hermes turn finished 2 jobs and refused a 97-character job with no arm motion. A hostile job's text never appeared in its transcript.
 - **Ink score:** the real "Lorem" card scored 0.56 coverage and 0.22 stray ink; the same card scored as the wrong word got 0.34 and 0.56. The pass line is 0.50 and 0.30, based on this one card.
-- **Next:** one supervised live run on a blank card.
+- **Next:** one real job from the card server through Hermes on a blank card. The arm is still 0 of 3 on real pipeline runs.
 - **Card side:** no job contract change. The existing `refused` reply is what `refuse_job` will send. Keep `jobs/` empty until Alex says connect.
 
 ## Needed from the card side before production
