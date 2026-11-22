@@ -14,6 +14,12 @@ WEAK_START = {"am", "is", "are", "was", "were", "be", "of", "for", "to", "and", 
 WEAK_END = WEAK_START | {"a", "an", "the", "i", "we", "my", "your", "our", "this", "that", "not", "really", "very", "like"}
 
 
+# The archive's phrases that stand alone as a reply: exact words from each line, chosen by hand.
+ARCHIVE_REPLIES = {"h08": ("so sorry!", "you are okay!"), "h12": ("Keep pushing.", "stronger I promise"),
+                   "h14": ("I'm really proud", "proud of you"), "h16": ("don't worry",)}
+HANGS_ON_YOU = {"hope", "think", "know", "wish", "bet", "guess", "if", "when", "that", "so", "and", "but"}
+
+
 def _bare(word):
     return pen_text(word)[0].lower().strip(".,!?;:\"'()")
 
@@ -70,7 +76,7 @@ def _from(texts, rows, boxes=None):
     return whole or out
 
 
-def phrases(card):
+def _listed(card):
     """Every phrase this card can give, in reading order: [{text, words, row, box}].
 
     The words are the approved line's; their places on the card are Reducto's. If someone corrected
@@ -90,7 +96,29 @@ def phrases(card):
 def phrases_from_text(text):
     """Phrases of a line with no word boxes (tests, warm-up turns): one row."""
     tokens = (text or "").split()
-    return _from(tokens, [list(range(len(tokens)))])
+    return _complete(_from(tokens, [list(range(len(tokens)))]))
+
+
+def _fragment(p):
+    """A phrase that stops mid-thought, like "I hope you" or "of you for"."""
+    parts = p["text"].split()
+    bare = [_bare(w) for w in parts]
+    return (bare[0] in WEAK_START or bare[-1] in WEAK_END or _negates(parts[-1])
+            or any(w[-1] in ".,!?;:" for w in parts[:-1]) or (bare[-1] == "you" and bare[-2] in HANGS_ON_YOU))
+
+
+def _complete(found):
+    return [p for p in found if not _fragment(p)] or found
+
+
+def phrases(card):
+    """What this card may give: its phrases that read as a complete reply on their own."""
+    found = _listed(card)
+    chosen = ARCHIVE_REPLIES.get(card.get("bank_id"))
+    if chosen:
+        keys = {" ".join(norm(q)) for q in chosen}
+        return [p for p in found if " ".join(norm(p["text"])) in keys] or found
+    return _complete(found)
 
 
 def find(card, quote):
@@ -101,12 +129,8 @@ def find(card, quote):
 
 def default(card):
     """The phrase plain code gives when no model chose one: a complete-sounding one, then the earliest."""
-    def fragment(p):
-        parts = p["text"].split()
-        return _bare(parts[0]) in WEAK_START or _bare(parts[-1]) in WEAK_END or _negates(parts[-1]) or any(w[-1] in ".,!?;:" for w in parts[:-1])
-
     found = phrases(card)
-    return min(found, key=lambda p: (fragment(p), p["text"][-1] not in ".!?", p["words"][0], -len(p["words"]))) if found else None
+    return min(found, key=lambda p: (_fragment(p), p["text"][-1] not in ".!?", p["words"][0], -len(p["words"]))) if found else None
 
 
 def cannot_give(card):
