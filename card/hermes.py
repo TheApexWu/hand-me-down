@@ -8,7 +8,9 @@ all day (the image's documented `gateway run` mode) and each turn attaches to it
                 "chooser" profile, which has no bundled skills and one tool. It has to be a
                 volume, not a folder on the Mac: Hermes refuses its own control socket when the
                 mount can't hold file modes ("gateway.sock has mode 0755, expected 0600").
-  /work      <- the repo, so Hermes can run the body server (give) and the quote hook
+  /work/card        <- the repo's card/ folder, read-only: the body server (give) and the quote hook
+  /work/cache/turn  <- the one folder it can write: the turn in play and the pick, nothing else
+                       (not the repo root: the container must never see .env, cards/ or jobs/)
 
 The model is reached through OpenRouter. The key is OPENROUTER_API_KEY from the environment
 (or the git-ignored .env). `up` copies it into the chooser profile's own .env inside the Docker
@@ -33,7 +35,8 @@ NAME = os.environ.get("HMD_HERMES_CONTAINER", "hmd-hermes")
 PROFILE = "chooser"
 VOLUME = os.environ.get("HMD_HERMES_VOLUME", "hmd-hermes-home")
 PROFILE_DIR = f"/opt/data/profiles/{PROFILE}"
-WORK = "/work"  # the repo, as the container sees it
+WORK = "/work"  # where the container sees the two folders it is given
+MOUNTS = "2"    # bump when the mounts in _start change, so `up` replaces an older container
 PY = "/opt/hermes/.venv/bin/python"  # has the MCP SDK the body server needs
 
 # Keys checked against the config template and source inside the v0.23.3 image.
@@ -151,8 +154,11 @@ def gateway_ready():
 
 def _start(log):
     docker("rm", "-f", NAME)
-    run = docker("run", "-d", "--name", NAME, "--restart", "unless-stopped",
-                 "-v", f"{VOLUME}:/opt/data", "-v", f"{store.ROOT}:{WORK}", "-e", f"HMD_DATA={WORK}",
+    run = docker("run", "-d", "--name", NAME, "--restart", "unless-stopped", "--label", f"hmd.mounts={MOUNTS}",
+                 "-v", f"{VOLUME}:/opt/data",
+                 "-v", f"{store.ROOT / 'card'}:{WORK}/card:ro",
+                 "-v", f"{store.folder('cache/turn')}:{WORK}/cache/turn",
+                 "-e", f"HMD_DATA={WORK}",
                  IMAGE, "gateway", "run")
     if run.returncode:
         raise RuntimeError((run.stderr.strip() or "docker run failed")[-400:])
@@ -169,7 +175,8 @@ def up(log=print, wait=240):
     mark = _key_mark()
     if not mark:
         raise RuntimeError("OPENROUTER_API_KEY is not set (export it, or put it in .env)")
-    if not running():
+    mounts = docker("inspect", "-f", '{{ index .Config.Labels "hmd.mounts" }}', NAME).stdout.strip()
+    if not running() or mounts != MOUNTS:
         _start(log)
     restart = False
     if inside("test", "-d", PROFILE_DIR).returncode:
@@ -219,6 +226,10 @@ def check(log=print):
             log(detail[-600:])
 
     report(gateway_ready(), f"gateway is serving the {PROFILE} profile")
+    report(docker("exec", NAME, "test", "-r", f"{WORK}/.env").returncode != 0, "the container cannot read the repo's .env")
+    seen = sorted(docker("exec", NAME, "sh", "-c", f"cd {WORK} && find . -maxdepth 2 -mindepth 1 -not -path './card/*'").stdout.split())
+    report(seen == ["./cache", "./cache/turn", "./card"], f"the container sees only card/ and cache/turn/ of the repo (sees: {seen})")
+    report(docker("exec", NAME, "sh", "-c", f"touch {WORK}/card/.probe").returncode != 0, "card/ is read-only inside the container")
     test = hermes("mcp", "test", "body")
     out = test.stdout + test.stderr
     report(test.returncode == 0 and "Tools discovered: 1" in out and "give" in out,

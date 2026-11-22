@@ -120,11 +120,12 @@ def waiting(exclude=()):
 # run state (shared with the body server, the hook and the screen) ---------------
 
 def turn_file():
-    return folder("cache") / "turn.json"
+    # cache/turn/ is the one folder the Hermes container can write to: keep nothing else in it
+    return folder("cache/turn") / "turn.json"
 
 
 def pick_file():
-    return folder("cache") / "pick.json"
+    return folder("cache/turn") / "pick.json"
 
 
 def state():
