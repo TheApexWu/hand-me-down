@@ -1,24 +1,66 @@
-"""Pivot calibration: find where the pen tip sits on the claw, and the dot's position.
+"""Pivot calibration: where the pen tip sits on the claw, and where the dot is.
 
-Arm joints go limp (gripper keeps holding the pen). Hold the pen tip on one dot and rock the arm
-around it. Every sample satisfies  R_i @ tip_local + o_i = dot , so least squares gives
-tip_local (gripper-body frame) and the dot (base frame). Saves pen.json; logs every sample.
+Arm joints go limp (gripper keeps holding the pen). Hold the tip on one dot and rock the arm around
+it. Every sample satisfies  R_i @ tip_local + o_i = dot, so least squares gives tip_local in the
+rig's gripper frame and the dot in the base frame. Ends by clearing turn counts and holding.
 
   python pivot_calib.py [seconds=25]
 """
 import json
+import subprocess
 import sys
 import time
+from pathlib import Path
 
-import mujoco
 import numpy as np
 
 import armlog
-import arm_tools as at
-import penlib as pl
-from twin_live import deg_to_model
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "vendor" / "so101-sketch"))
+from so101_sketch.kinematics import fk                        # noqa: E402
 
 PORT = "/dev/tty.usbmodem5CBC4305521"
+JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
+WARN_S, PLACE_S, HZ = 5.0, 6.0, 20
+P_GAIN, TORQUE = 32, 800
+
+
+def say(text):
+    subprocess.Popen(["say", text])
+
+
+def read(r):
+    return {j: float(v) for j, v in r.bus.sync_read("Present_Position", JOINTS).items()}
+
+
+def solve(Rs, os_, keep):
+    n = len(keep)
+    A, b = np.zeros((3 * n, 6)), np.zeros(3 * n)
+    for k, i in enumerate(keep):
+        A[3 * k:3 * k + 3, :3] = Rs[i]
+        A[3 * k:3 * k + 3, 3:] = -np.eye(3)
+        b[3 * k:3 * k + 3] = -os_[i]
+    return np.linalg.lstsq(A, b, rcond=None)[0]
+
+
+def fit(Rs, os_):
+    """Least squares, re-fit without samples where the tip slipped off the dot."""
+    keep = np.arange(len(Rs))
+    for _ in range(5):
+        x = solve(Rs, os_, keep)
+        res = np.linalg.norm(Rs @ x[:3] + os_ - x[3:], axis=1) * 1000
+        new = np.where(res <= max(1.5, 2.5 * np.median(res[keep])))[0]
+        if len(new) == len(keep) or len(new) < 40:
+            break
+        keep = new
+    return x[:3], x[3:], keep, res
+
+
+def spread_deg(Rs):
+    ref = Rs[len(Rs) // 2]
+    cos = (np.trace(np.swapaxes(ref, 0, 1) @ Rs, axis1=1, axis2=2) - 1) / 2
+    return float(np.degrees(np.arccos(np.clip(cos, -1, 1))).max())
 
 
 def main():
@@ -26,46 +68,62 @@ def main():
     from lerobot.robots.so_follower import SO101Follower, SO101FollowerConfig
     r = SO101Follower(SO101FollowerConfig(port=PORT, id="follower_a"))
     r.bus.connect()
-    br = at.load_bridge()
-    m = pl.build_model()
-    d = mujoco.MjData(m)
-    body = pl.Pen(m).body
     log = armlog.ArmLog("pivot", r)
-    r.bus.disable_torque(pl.ARM_JOINTS)                 # gripper stays on, still holding the pen
-    r.bus._bus.reset_turn_count([r.bus.motors[j].id for j in pl.ARM_JOINTS])
-    print(f"Arm is limp. Hold the pen tip on the dot and rock the arm for {secs:.0f} s.")
-    Rs, os_, t_end = [], [], time.monotonic() + secs
-    while time.monotonic() < t_end:
-        pos = {k: float(v) for k, v in r.bus.sync_read("Present_Position").items()}
-        d.qpos[:pl.ARM] = deg_to_model(pos, br)
-        mujoco.mj_kinematics(m, d)
-        Rs.append(d.xmat[body].reshape(3, 3).copy())
-        os_.append(d.xpos[body].copy())
-        log.tick("pivot", {}, pos, torque_on=False)
-        time.sleep(0.05)
-    r.bus.disconnect(disable_torque=False)
+    ids = [r.bus.motors[j].id for j in JOINTS]
+    Rs, os_ = [], []
+    try:
+        say("Hold the arm. Going limp in five seconds.")
+        time.sleep(WARN_S)
+        r.bus.disable_torque(JOINTS)                          # gripper stays on, holding the pen
+        say("Limp. Put the pen on the dot.")
+        t_rock = time.monotonic() + PLACE_S
+        while time.monotonic() < t_rock:
+            log.tick("pivot-place", {}, read(r), torque_on=False)
+            time.sleep(1 / HZ)
+        say("Rock now.")
+        t_end = time.monotonic() + secs
+        while time.monotonic() < t_end:
+            q = read(r)
+            t = fk({**q, "gripper": 0.0})
+            Rs.append(t[:3, :3].copy())
+            os_.append(t[:3, 3].copy())
+            log.tick("pivot", {}, q, torque_on=False)
+            time.sleep(1 / HZ)
+    finally:
+        failed = r.bus._bus.reset_turn_count(ids)             # hand motion can leave a turn count
+        hold = read(r)
+        r.bus.sync_write("Goal_Position", hold)
+        for j in JOINTS:
+            r.bus.write("P_Coefficient", j, P_GAIN, normalize=False)
+            r.bus.write("Torque_Limit", j, TORQUE, normalize=False)
+        if failed:
+            print("turn-count reset failed on", failed, "- leaving torque OFF. Support the arm.")
+            say("Problem. Keep holding the arm.")
+        else:
+            r.bus.enable_torque(JOINTS)
+            say("Done. Holding.")
+        log.save_pose(hold, not failed)
+        r.bus.disconnect(disable_torque=False)
+
     Rs, os_ = np.array(Rs), np.array(os_)
-    spread = np.degrees(np.ptp([np.arctan2(R[1, 0], R[0, 0]) for R in Rs]))
-    A = np.zeros((3 * len(Rs), 6)); b = np.zeros(3 * len(Rs))
-    for i, (R, o) in enumerate(zip(Rs, os_)):
-        A[3 * i:3 * i + 3, :3] = R
-        A[3 * i:3 * i + 3, 3:] = -np.eye(3)
-        b[3 * i:3 * i + 3] = -o
-    x, *_ = np.linalg.lstsq(A, b, rcond=None)
-    tip_local, dot = x[:3], x[3:]
-    resid = np.linalg.norm((A @ x - b).reshape(-1, 3), axis=1) * 1000
-    sid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_SITE, "gripperframe")
-    site_local = m.site_pos[sid]
-    out = {"tip_local_m": tip_local.round(5).tolist(), "dot_base_m": dot.round(5).tolist(),
-           "samples": len(Rs), "residual_mm_median": round(float(np.median(resid)), 2),
-           "residual_mm_p90": round(float(np.percentile(resid, 90)), 2), "rotation_spread_deg": round(float(spread), 1),
-           "tip_past_gripperframe_mm": round(float(np.linalg.norm(tip_local - site_local)) * 1000, 1)}
+    tip, dot, keep, res = fit(Rs, os_)
+    out = {"frame": "rig gripper_frame_link (so101_sketch.kinematics.fk)",
+           "tip_local_m": tip.round(5).tolist(), "tip_distance_mm": round(float(np.linalg.norm(tip)) * 1000, 1),
+           "dot_base_m": dot.round(5).tolist(), "samples": len(Rs), "samples_kept": int(len(keep)),
+           "residual_mm_median": round(float(np.median(res[keep])), 2),
+           "residual_mm_p90": round(float(np.percentile(res[keep], 90)), 2),
+           "rotation_spread_deg": round(spread_deg(Rs[keep]), 1)}
+    good = out["residual_mm_median"] <= 1.5 and out["rotation_spread_deg"] >= 15 and len(keep) >= 100
+    out["quality"] = "good" if good else "loose"
     log.event("pivot_result", **out)
-    (at.HERE / "pen.json").write_text(json.dumps(out, indent=2))
     print(json.dumps(out, indent=2))
-    print("saved", at.HERE / "pen.json", "| log", log.close())
-    if out["residual_mm_median"] > 2 or len(Rs) < 100:
-        print("WARNING: fit is loose. Keep the tip pinned and rock through bigger angles, then rerun.")
+    if good:
+        (Path(__file__).parent / "pen.json").write_text(json.dumps(out, indent=2))
+        print("saved pen.json")
+    else:
+        (Path(__file__).parent / "pen.loose.json").write_text(json.dumps(out, indent=2))
+        print("NOT saved as pen.json: keep the tip pinned and rock through bigger angles, then rerun.")
+    print("log:", log.close())
 
 
 if __name__ == "__main__":

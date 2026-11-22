@@ -1,0 +1,96 @@
+#!/usr/bin/env -S python3 -S
+"""arm state | stop | up | l | go NAME | save NAME | tip X Y Z | pan=5 lift=-3 | pan+=2 | traj FILE | quit
+add -w to wait for the move, s=15 for deg/s"""
+import json
+import os
+import re
+import socket
+import sys
+import time
+
+SOCK = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "state", "armd.sock")
+
+
+def ask(msg):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(2)
+    s.connect(SOCK)
+    s.sendall((json.dumps(msg) + "\n").encode())
+    buf = b""
+    while not buf.endswith(b"\n"):
+        chunk = s.recv(65536)
+        if not chunk:
+            break
+        buf += chunk
+    s.close()
+    return json.loads(buf)
+
+
+def parse(args):
+    speed = {}
+    rest = []
+    for a in args:
+        if a.startswith("s="):
+            speed = {"speed": float(a[2:])}
+        else:
+            rest.append(a)
+    c = rest[0]
+    if c == "l":
+        return {"c": "go", "name": "l", **speed}
+    if c in ("go", "save"):
+        return {"c": c, "name": rest[1], **speed}
+    if c == "tip":
+        return {"c": "tip", "x": float(rest[1]), "y": float(rest[2]), "z": float(rest[3]), **speed}
+    if c == "traj":
+        return {"c": "traj", "path": rest[1], **speed}
+    if "=" not in c:
+        return {"c": c, **speed}
+    sets, adds = {}, {}
+    for a in rest:
+        m = re.fullmatch(r"(\w+)([+-]?)=(-?[\d.]+)", a)
+        if not m:
+            sys.exit(f"bad joint arg {a}")
+        if m[2]:
+            adds[m[1]] = float(m[3]) * (-1 if m[2] == "-" else 1)
+        else:
+            sets[m[1]] = float(m[3])
+    return {"c": "joints", "set": sets, "add": adds, **speed}
+
+
+def show(r, ms):
+    if "pos" in r:
+        p = r["pos"]
+        print(f"{'ok' if r['ok'] else 'REFUSED'} {ms:.1f}ms | pan {p['shoulder_pan']} lift {p['shoulder_lift']} "
+              f"elbow {p['elbow_flex']} wrist {p['wrist_flex']} roll {p['wrist_roll']} | tip z {r['tip_z_mm']} | "
+              f"max {max(r['temps'].values()) if r['temps'] else '?'} C | "
+              f"{'moving ' + str(r['left_s']) + 's' if r['moving'] else 'still'}"
+              + (f" | last stop: {r['last_stop']}" if r.get("last_stop") else ""))
+    if not r["ok"]:
+        print("REFUSED:", r.get("err"))
+
+
+def main():
+    args = sys.argv[1:]
+    wait = "-w" in args
+    args = [a for a in args if a != "-w"]
+    if not args:
+        sys.exit(__doc__)
+    t = time.perf_counter()
+    try:
+        r = ask(parse(args))
+    except (FileNotFoundError, ConnectionRefusedError):
+        sys.exit("armd is not running: python armd.py")
+    ms = (time.perf_counter() - t) * 1000
+    moved = r.get("moving")
+    while wait and r.get("ok") and r.get("moving"):
+        time.sleep(0.04)
+        r = ask({"c": "state"})
+    if wait and moved:                                        # the queue empties before the motors settle
+        time.sleep(0.4)
+        r = ask({"c": "state"})
+    show(r, ms)
+    sys.exit(0 if r.get("ok") else 1)
+
+
+if __name__ == "__main__":
+    main()

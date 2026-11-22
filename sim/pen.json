@@ -1,0 +1,17 @@
+{
+  "frame": "rig gripper_frame_link",
+  "method": "dot located from inked test lines in the fixed webcam; commanded frame, valid for this pen mount and riser",
+  "tip_local_m": [
+    0.0,
+    0.0,
+    0.04538
+  ],
+  "pen_length_mm": 45.4,
+  "dot_base_m": [
+    0.2125,
+    0.0281,
+    0.046
+  ],
+  "xy_scatter_mm_median": 1.93,
+  "source_log": "20261122-111928-pivot.jsonl"
+}
