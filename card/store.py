@@ -132,7 +132,9 @@ def state():
 
 
 def set_state(**fields):
-    new = {"v": int(time.time() * 1000), **fields}
+    # v is what the screen watches. It must come last (a caller may pass back an old state,
+    # old v included) and must always move forward, even within one millisecond.
+    new = {**fields, "v": max(int(time.time() * 1000), int(state().get("v", 0)) + 1)}
     write_json(folder("cache") / "state.json", new)
     return new
 
