@@ -1,0 +1,19 @@
+diff --git a/so101_sketch/config.py b/so101_sketch/config.py
+index a6443a2..dc128f6 100644
+--- a/so101_sketch/config.py
++++ b/so101_sketch/config.py
+@@ -26,10 +26,10 @@ MAX_RELATIVE_TARGET_DEG = 12.0
+ # use_degrees=True lerobot reports 0 deg at the middle of each range, which is exactly the
+ # zero of the so101_new_calib URDF.
+ CAL_TICKS = {
+-    "shoulder_pan": (765, 3437),
+-    "shoulder_lift": (914, 3280),
+-    "elbow_flex": (820, 3027),
+-    "wrist_flex": (920, 3230),
++    "shoulder_pan": (711, 3437),
++    "shoulder_lift": (825, 3207),
++    "elbow_flex": (817, 3038),
++    "wrist_flex": (868, 3209),
+ }
+ LIMIT_MARGIN_DEG = 4.0
+ LIMITS_DEG = {

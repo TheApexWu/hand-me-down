@@ -1,6 +1,6 @@
 # Arm Status
 
-Updated Sun 22 Nov 2026, 14:03. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
+Updated Sun 22 Nov 2026, 14:11. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
 
 ## Working
 
@@ -31,7 +31,7 @@ For the arm-offline switch: `git show origin/alex/arm-pen:docs/hand-me-down-sim-
 
 `card/gate.py` screens a card before it can join the rail. It can hold a card for a person and never rejects one.
 
-Wired on branch `alex/card-gate` at `1c69942`, ready for the card side to merge. Until the container has a no-tools `gate` profile, every card is held.
+Wired on branch `alex/card-gate` at `17f58f1`, with the message bank, ready for the card side to merge. Until the container has a no-tools `gate` profile, every card is held.
 
 1. **Gate Hermes:** no tools. Labels each card ok, self_harm, threat, hate, sexual or private_info. Any failure holds the card.
 2. **Chooser Hermes:** only `give`. Picks an exact short phrase from a card that passed.
@@ -41,6 +41,14 @@ Wired on branch `alex/card-gate` at `1c69942`, ready for the card side to merge.
 - Tested on 11 lines: 5 ordinary painful notes passed, and 6 harmful, private or prompt-injection lines were held. A broken Hermes command also held the card. This is a small test.
 - Pangram is wired in but **not tested**, because this laptop has no Pangram key. Do not claim it in the pitch until it has been tested on real short cards. It may only flag a card for review.
 - A held card stays off the rail and public screen until the operator releases it. If it suggests self-harm, a person talks to the visitor. Nothing is sent automatically.
+
+## Message bank
+
+`card/message_bank.jsonl` has 51 labeled lines: 17 real pre-2020 comments from GoEmotions, 17 AI-written lines and 17 AI rewrites of the human lines.
+
+- The bank tests Pangram with `python -m card.pangram_eval`. Pangram has not scored it yet.
+- AI lines can never reach a visitor.
+- `python -m card.bank top-up 5` can fill a short rail with up to 4 screened human comfort lines. They must stay marked as archive, and real visitors' cards count first.
 
 ## Quote mode: what the visitor receives
 
@@ -107,5 +115,7 @@ cd ~/dev/hand-me-down && .venv/bin/python private/live/card/arm_sync.py --host I
 # worker
 cd ~/dev/hand-me-down/sim && ../.venv/bin/python -B arm_worker.py --run --root ../private/live
 ```
+
+To run this arm from a fresh clone, apply `sim/so101_sketch_local.patch` inside `vendor/so101-sketch`, then run `python sim/defaults.py apply`.
 
 `private/` is git-ignored and holds card photos, webcam frames and live job data. Do not commit images from it.
