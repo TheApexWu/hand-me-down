@@ -1,6 +1,6 @@
 # Arm Status
 
-Updated Sun 22 Nov 2026, 13:27. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
+Updated Sun 22 Nov 2026, 13:31. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
 
 ## Working
 
@@ -27,15 +27,17 @@ For the arm-offline switch: `git show origin/alex/arm-pen:docs/hand-me-down-sim-
 - The arm worker does not send a `refused` reply yet. The card side already accepts one.
 - Pen height is one value for the whole card (first ink 49 mm, writing 46 mm). Moving the riser or pen means measuring it again.
 
-## Plan: Hermes drives the arm
+## Hermes drives the arm
 
-Status: planned, not built. Today Hermes picks the card and deterministic code drives the arm.
+Status: built and tested in dry mode, not yet run on the real arm. `sim/arm_mcp.py` holds the tools and `sim/hermes_drive.py` runs one pass.
 
 - **Two Hermes roles.** The chooser stays on the card laptop, reads card text and has only `give`. A separate `arm` profile on Alex's laptop runs the arm. It sees job numbers and measurements, and never receives card text, so a hostile card cannot steer it.
 - **Arm tools:** `arm_status`, `write_job(job, press_mm, speed)`, `finish_job(job, note)`, `refuse_job(job, reason)`, `stop_arm`.
 - **Limits enforced in code:** queued jobs only, no free text, no raw joint commands, press 2-4 mm, speed 0.7-1.2x, blank-card check before writing, and a return to L after every run.
 - **Feedback loop:** after each write, the webcam scores ink along the planned path. Hermes sees recent runs and chooses the next press and speed inside those limits.
-- **Build order:** tools in dry mode, one real Hermes turn on a fake job, then one supervised run on the real arm.
+- **Dry test:** one real Hermes turn finished 2 jobs and refused a 97-character job with no arm motion. A hostile job's text never appeared in its transcript.
+- **Ink score:** the real "Lorem" card scored 0.56 coverage and 0.22 stray ink; the same card scored as the wrong word got 0.34 and 0.56. The pass line is 0.50 and 0.30, based on this one card.
+- **Next:** one supervised live run on a blank card.
 - **Card side:** no job contract change. The existing `refused` reply is what `refuse_job` will send. Keep `jobs/` empty until Alex says connect.
 
 ## Needed from the card side before production
