@@ -7,7 +7,7 @@ TYPOGRAPHY = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—":
               "…": "...", " ": " ", "~": "-"}
 
 # Quote mode (ARM_STATUS.md, 22 Nov 13:43): a stranger's card is written as a short quote only.
-MAX_QUOTE_WORDS, MAX_QUOTE_CHARS = 3, 16
+MAX_QUOTE_WORDS, MAX_QUOTE_CHARS = 3, 24
 
 
 def pen_text(text):

@@ -1,13 +1,33 @@
 """Quote mode: the visitor receives a short, exact phrase from a stranger's card, not the whole card.
 
 From ARM_STATUS.md (22 Nov, 13:43): candidates are 2 or 3 consecutive words in one written row,
-at most 16 characters once cleaned the way the arm cleans them. They are built from Reducto's word
+at most 24 characters once cleaned the way the arm cleans them. They are built from Reducto's word
 boxes, so a phrase never runs across a line break. The chooser must pick one of them exactly (plain
 code checks it, in the hook and in the tool), the job carries it as `quote`, and a card with no
 candidate can't be given.
 """
 from .pen import MAX_QUOTE_CHARS, MAX_QUOTE_WORDS, pen_text
 from .quote import words as norm
+
+NEGATIONS = {"not", "no", "never", "nor", "cannot", "without", "dont", "cant", "wont"}
+WEAK_START = {"am", "is", "are", "was", "were", "be", "of", "for", "to", "and", "but", "or", "so", "about", "in", "on", "at"}
+WEAK_END = WEAK_START | {"a", "an", "the", "i", "we", "my", "your", "our", "this", "that", "not", "really", "very", "like"}
+
+
+def _bare(word):
+    return pen_text(word)[0].lower().strip(".,!?;:\"'()")
+
+
+def _negates(word):
+    bare = _bare(word)
+    return bare in NEGATIONS or bare.endswith("n't")
+
+
+def _flips_meaning(texts, first):
+    """Cutting a phrase right after a negation reverses it: "don't give up" must never become "give up"."""
+    if not first:
+        return False
+    return _negates(texts[first - 1])
 
 
 def _union(boxes):
@@ -35,6 +55,8 @@ def _from(texts, rows, boxes=None):
             for s in range(len(ids) - n + 1):
                 idx = ids[s:s + n]
                 if idx != list(range(idx[0], idx[0] + n)):     # consecutive as written, not just side by side
+                    continue
+                if _flips_meaning(texts, idx[0]):
                     continue
                 text, missing = pen_text(" ".join(texts[i] for i in idx))
                 if missing or len(text.split()) != n or len(text) > MAX_QUOTE_CHARS:
@@ -77,9 +99,13 @@ def find(card, quote):
 
 
 def default(card):
-    """The phrase plain code gives when no model chose one: the earliest, preferring three words."""
+    """The phrase plain code gives when no model chose one: a complete-sounding one, then the earliest."""
+    def fragment(p):
+        parts = p["text"].split()
+        return _bare(parts[0]) in WEAK_START or _bare(parts[-1]) in WEAK_END or _negates(parts[-1]) or any(w[-1] in ".,!?;:" for w in parts[:-1])
+
     found = phrases(card)
-    return min(found, key=lambda p: (p["words"][0], -len(p["words"]))) if found else None
+    return min(found, key=lambda p: (fragment(p), p["text"][-1] not in ".!?", p["words"][0], -len(p["words"]))) if found else None
 
 
 def cannot_give(card):

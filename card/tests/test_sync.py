@@ -56,7 +56,7 @@ def test_a_withdrawn_job_disappears_and_its_late_reply_does_not_block_the_next_j
     (arm / "done").mkdir(exist_ok=True)
     (arm / "done" / "001.json").write_text(json.dumps({"delivered_at": "11:02", "duration_s": 50}))
     visit.discard(store.load_card(1))                      # keep card 1 off the rail so the next job is another card
-    second = make_job(card_photo, monkeypatch, 2, "never learned to swim", "learned to swim")
+    second = make_job(card_photo, monkeypatch, 2, "never learned to swim", "never learned")
     assert arm_sync.sync_once(site.base, arm, TOKEN, have, sent, log=said.append) == 0     # one pass, no abort
     assert not (arm / "jobs" / "001.json").exists()                                        # withdrawn: the arm can't start it
     assert (arm / "jobs" / f"{store.nnn(second['card_no'])}.json").exists()                # the next job still arrived

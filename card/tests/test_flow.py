@@ -68,7 +68,7 @@ def test_two_bad_quotes_fall_back_to_the_longest_waiting_card(card_photo):
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("anything"), is_online=True,
                        cmd=calls(["002", "is leaving and"], ["002", "made up words"]))
     assert job["picked_by"] == "rule" and job["card_no"] == 1 and job["misses"] == 2
-    assert job["quote"] == "is leaving and"          # a pick by rule still carries a phrase, never the whole card
+    assert job["quote"] == "can't say it"          # a pick by rule still carries a phrase, never the whole card
 
 
 def test_late_model_falls_back_and_cannot_give_afterwards(card_photo):
