@@ -97,6 +97,24 @@ A chooser turn is about 10.3k input tokens (9.6k of them cached) and about 3.5 s
 
 Decision: Pangram did not work reliably on very short text. It stays out of the pitch and out of the live decision. `PANGRAM_LIVE` is false in `card/gate.py`, so visitors' words are not sent to Pangram at all. `HMD_PANGRAM_LIVE=1` turns it back on, and even then it can only hold a card for a person, never reject one.
 
+## Demo checks (after merging alex/safe-quotes)
+
+**Gate.** The demo's vent card ("Sometimes everything is moving too fast. I feel lost and left behind. When will my time come?") was labeled ok in 5 of 5 runs (1.5–2.4 s), and "Don't give up" was labeled ok. Neither would be held on stage.
+
+**Chooser.** In each run, the vent card was the visitor. "Don't give up" and one other card were waiting. The runs used scratch data, never the live `jobs/`, with real Hermes:
+
+| Second card on the rail | Runs that gave "Don't give up" | What Hermes gave otherwise |
+|---|---|---|
+| keeps the porch light on | 2 of 3 | "porch light on" |
+| Slow down and breathe | 0 of 3 | "Slow down", "Slow down and" (×2) |
+| I had pancakes for breakfast | 5 of 5 | |
+| My cat sleeps all day | 5 of 5 | |
+
+Takeaways:
+
+- The second card decides the demo. A card that speaks to the same feeling as the vent card wins over "Don't give up". An unrelated one gives Hermes a real choice and still ends on "Don't give up".
+- Hermes can choose a listed fragment such as "Slow down and". `quotes.default()` avoids weak endings for rule picks, but the candidate list sent to Hermes still includes them.
+
 ## Observations
 
 1. **Restarts.** The gateway has to restart to load a new profile, config or body-server code. `hermes up` restarts it when the body server's code fingerprint changes.
