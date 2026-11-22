@@ -107,3 +107,18 @@ def test_next_card_resets_the_rail_and_runs_again(card_photo, site, monkeypatch)
             if not json.loads(site.get("/api/status")[1])["busy"]:
                 break
             time.sleep(0.02)
+
+
+def test_a_card_nobody_could_read_gets_no_reply(card_photo, site, monkeypatch):
+    monkeypatch.setattr(server, "DEMO_HOLD_S", 0.05)
+    site.capture(card_photo("a", "Keep Going!!"), "Keep Going!!", seed=True)
+    site.app.reducto_call = reducto_says("")
+    assert site.call("/api/next", body={"file": str(card_photo("v", "v"))})[0] == 200
+    state = wait_for("idle", site)
+    for _ in range(100):
+        state = json.loads(site.get("/state.json")[1])
+        if state.get("unread"):
+            break
+        time.sleep(0.03)
+    assert state.get("unread") and not list(store.folder("jobs").glob("[0-9]*.json"))
+    assert [c["card_no"] for c in store.waiting()] == [1]

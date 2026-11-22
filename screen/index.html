@@ -242,7 +242,7 @@
     house: 'FROM THE HOUSE',
     archive: 'ARCHIVE', archive_line: src => `FROM THE ARCHIVE${src ? `  <b>${src}</b>` : ''}`, archived: n => `${n} ARCHIVE`,
     pen: 'PEN', delivered_at: (t, d) => `DELIVERED <b>${t}</b>  TOOK <b>${d}</b>`, returned: 'RETURNED TO THE STACK',
-    next: 'NEXT CARD', camera: 'LIVE CAMERA', phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
+    next: 'NEXT CARD', unread: 'COULD NOT READ THAT CARD. LAY IT FLAT AND PRESS AGAIN', camera: 'LIVE CAMERA', phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
   };
 
   const $ = id => document.getElementById(id);
@@ -433,6 +433,7 @@
     const was = prev.stage, now = s.stage, env = $('env'), theirsEl = $('theirs');
     document.body.className = 'stage-' + now + (s.sim ? ' sim-on' : '');
     steps(now);
+    if (now === 'idle') { clearNotes(); if (s.unread) note('l1', LABELS.unread); }
     const clip = $('sim-video');
     if (s.sim && clip.paused) { if (!clip.src) clip.src = '/sim.mp4'; clip.currentTime = 0; clip.play().catch(() => {}); }
     if (!s.sim && !clip.paused) clip.pause();
