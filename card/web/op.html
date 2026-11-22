@@ -45,6 +45,8 @@
       <div class="row" style="margin-top:8px"><span class="dim">Arm writes in</span>
         <button id="b-font">plotter font</button><button id="b-trace">their handwriting</button>
         <span id="busy" class="warn"></span></div>
+      <div class="row" style="margin-top:8px"><input type="text" id="testline" placeholder="a test line for the arm: type it yourself, no card needed">
+        <button id="b-test">Send to the arm</button><button id="b-withdraw">Withdraw job<kbd>w</kbd></button></div>
       <div id="error" class="bad" style="margin-top:8px"></div>
       <div id="notes" class="warn" style="margin-top:4px"></div>
     </section>
@@ -89,7 +91,8 @@
     $('notes').textContent = [st.layout_measured ? '' : 'layout.json is not measured yet: the whole frame is treated as the card', L.house_line === 'PLACEHOLDER HOUSE LINE' ? 'house line is still the placeholder' : '', L.require_tick && !L.tick ? 'no tick box in the layout: every card is treated as not OK to show' : '', L.require_tick ? '' : 'require_tick is off: every card is shown without a tick', st.sim_clip ? '' : 'no simulation clip at ' + st.sim_clip_wanted].filter(Boolean).join(' · ');
     $('b-visit').disabled = $('b-seed').disabled = st.busy || s.stage === 'confirm';
     $('b-yes').disabled = $('b-no').disabled = st.busy || s.stage !== 'confirm';
-    $('b-another').disabled = st.busy || !j || !!st.done;
+    $('b-another').disabled = st.busy || !j || !!st.done || !vis;
+    $('b-withdraw').disabled = st.busy || !j || !!st.done; $('b-test').disabled = st.busy || s.stage === 'confirm';
     $('b-sim').className = st.sim ? 'on' : ''; $('b-sim').firstChild.textContent = st.sim ? 'Simulation is on the screen: stop' : 'Arm offline: play simulation';
     $('b-sim').disabled = !st.sim && !st.sim_clip; $('b-sim').title = st.sim_clip ? '' : 'put the clip at ' + st.sim_clip_wanted;
         $('b-rec').className = st.recording ? 'on' : ''; $('b-rec').firstChild.textContent = st.recording ? 'Stop recording' : 'Record run';
@@ -121,6 +124,8 @@
   $('b-clear').onclick = () => post('/api/clear');
   $('b-rec').onclick = () => post('/api/record');
   $('b-sim').onclick = () => post('/api/sim', {on: !(st && st.sim)});
+  $('b-test').onclick = () => $('testline').value.trim() && post('/api/testjob', {text: $('testline').value});
+  $('b-withdraw').onclick = () => post('/api/withdraw');
   $('b-font').onclick = () => post('/api/layout', {mode: 'font'});
   $('b-trace').onclick = () => post('/api/layout', {mode: 'trace'});
   $('b-fix').onclick = () => st?.visitor && $('fix').value.trim() && post('/api/fix', {card: st.visitor.no, text: $('fix').value}).then(() => $('fix').value = '');
@@ -131,7 +136,7 @@
   });
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.metaKey || e.ctrlKey) return;
-    const b = {' ': 'b-visit', s: 'b-seed', y: 'b-yes', n: 'b-no', a: 'b-another', c: 'b-clear', r: 'b-rec', m: 'b-sim'}[e.key];
+    const b = {' ': 'b-visit', s: 'b-seed', y: 'b-yes', n: 'b-no', a: 'b-another', c: 'b-clear', r: 'b-rec', m: 'b-sim', w: 'b-withdraw'}[e.key];
     if (b) { e.preventDefault(); if (!$(b).disabled) $(b).click(); }
   });
   setInterval(refresh, 700); refresh();

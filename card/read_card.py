@@ -90,6 +90,7 @@ def parse_image(image, call=None):
     cached = store.folder("cache/reads") / f"{digest}.json"
     try:
         if call is None:
+            store.load_env()   # a key added to .env while the server runs counts from the next card
             if not os.environ.get("REDUCTO_API_KEY"):
                 raise RuntimeError("REDUCTO_API_KEY is not set")
             if not online():

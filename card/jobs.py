@@ -64,6 +64,22 @@ def write(pick, visitor, layout=None):
     return job
 
 
+def write_test(text):
+    """A job whose words one of us typed, for trying the arm with no card in the loop.
+
+    It follows the contract like any other job. Numbered with the house lines (from 900), always font."""
+    used = [int(p.stem) for p in store.folder("jobs").glob("9[0-9][0-9].json")]
+    n = max(used, default=HOUSE_FROM - 1) + 1
+    job = {"card_no": n, "line": " ".join(text.split()), "crop": None, "bbox": None, "quote": None,
+           "picked_by": "rule", "written_at": store.clock(), "mode": "font", "trace": None,
+           "card_img": None, "name": None, "ok_to_show": None, "house": True, "test": True,
+           "visitor_no": None, "why": "a test line typed by the operator", "misses": 0, "pick_secs": 0.0,
+           "queued_at": time.time()}
+    done_file(n).unlink(missing_ok=True)
+    store.write_json(job_file(n), job)
+    return job
+
+
 def done(n):
     return store.read_json(done_file(n))
 

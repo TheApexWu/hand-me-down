@@ -42,3 +42,26 @@ def test_card_to_delivered_with_the_fake_arm(card_photo, site, monkeypatch):
     assert len(post["written_at"]) == 5
     status = json.loads(site.get("/api/status")[1])
     assert status["done"]["delivered_at"] == post["delivered_at"] and status["given"] == 1
+
+
+def test_a_typed_test_line_goes_to_the_arm_and_comes_back_delivered(site):
+    """For trying the arm before any real card can flow: the operator types the line."""
+    assert site.call("/api/testjob", body={"text": "  hand   me down "})[0] == 200
+    writing = wait_for("writing", site)
+    assert writing["job"] == 900 and writing["visitor"] is None and writing["stranger"] is None
+    job = store.read_json(store.BASE / "jobs" / "900.json")
+    assert {k: job[k] for k in ("card_no", "line", "crop", "bbox", "quote", "picked_by", "mode")} == {
+        "card_no": 900, "line": "hand me down", "crop": None, "bbox": None, "quote": None, "picked_by": "rule", "mode": "font"}
+    assert len(job["written_at"]) == 5 and job["test"] is True
+    assert fake_arm.run_once(store.BASE, seconds=0, log=lambda *_: None) == ["900"]
+    assert wait_for("delivered", site)["postmark"]["duration_s"] == 0
+    assert site.call("/api/testjob", body={"text": "   "})[0] == 400          # nothing typed, nothing sent
+
+
+def test_a_job_can_be_withdrawn_before_the_arm_does_it(site):
+    site.call("/api/testjob", body={"text": "hand me down"})
+    wait_for("writing", site)
+    assert site.call("/api/withdraw", body={})[0] == 200
+    wait_for("idle", site)
+    assert not (store.BASE / "jobs" / "900.json").exists()
+    assert fake_arm.run_once(store.BASE, seconds=0, log=lambda *_: None) == []   # nothing for the arm to write

@@ -182,6 +182,19 @@ class App:
         visit.shelve(card)
         self.show_job(card)
 
+    def test_job(self, text):
+        """Send the arm a line one of us typed: no card, no chooser. For trying the arm."""
+        self.visitor, self.job = None, jobs.write_test(text)
+        self.show_job(None)
+
+    def withdraw(self):
+        """Take back the job in play before the arm has done it (the arm side deletes its copy)."""
+        if self.job and not jobs.done(self.job["card_no"]):
+            visit.ungive(self.job)
+            self.job = None
+            self.record_stop()
+            store.set_state(stage="idle")
+
     def img(self, card):
         """The crop's URL for the screen, or None: a card that isn't OK to show never gets one."""
         return (card and card.get("may_show") and card.get("crop") and "/" + card["crop"]) or None
@@ -191,7 +204,7 @@ class App:
         stranger = None if job.get("house") else store.load_card(job["card_no"])
         store.set_state(stage="writing", visitor=self.img(visitor), stranger=self.img(stranger),
                         by=job["picked_by"],
-                        marks=quote_marks(job["quote"], stranger, visitor if visitor.get("may_show") else None),
+                        marks=quote_marks(job["quote"], stranger, visitor if visitor and visitor.get("may_show") else None),
                         job=job["card_no"], started=time.time(), est_s=jobs.expected_seconds())
         self.record_start(f"job{store.nnn(job['card_no'])}")
 
@@ -437,6 +450,13 @@ def make_handler(app):
                 keep = {k: body[k] for k in ("corners", "card_mm", "line", "name", "tick", "number", "page",
                                              "mode", "camera", "house_line", "deadline_s", "tick_ink_min") if k in body}
                 lay.save({**lay.load(), **keep})
+            elif path == "/api/testjob":
+                text = " ".join(str(arg("text") or "").split())
+                if not text:
+                    return self.send({"ok": False, "error": "type the line first"}, code=400)
+                ok = app.start(lambda: app.test_job(text))
+            elif path == "/api/withdraw":
+                ok = app.start(app.withdraw)
             elif path == "/api/sim":
                 problem = app.set_sim(str(arg("on")) in ("1", "true", "True"))
                 if problem:
