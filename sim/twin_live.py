@@ -85,7 +85,7 @@ def main():
     a = ap.parse_args()
     br = at.load_bridge()
     paper = pl.Paper.load(at.HERE / "paper.json")
-    m = pl.build_model(paper, offscreen=(W, H))
+    m = pl.build_model(paper, offscreen=(W, H), rig=True)
     d = mujoco.MjData(m)
     pen = pl.Pen(m)
     ren = mujoco.Renderer(m, height=H, width=W, max_geom=8000)

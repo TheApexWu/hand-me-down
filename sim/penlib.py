@@ -3,6 +3,7 @@
 Used by write_sim.py (MuJoCo render) and arm_tools.py (real arm). Units: metres and radians
 inside, millimetres for strokes on the page.
 """
+import math
 import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -44,16 +45,36 @@ class Paper:
         return np.array([self.center_x - v, self.center_y + u, self.z + lift])
 
 
-def build_model(paper=None, offscreen=(1280, 720)):
+def add_rig(spec):
+    """The real table setup from defaults.json: the riser box with the card on it."""
+    d = json.loads((HERE / "defaults.json").read_text())
+    box, card = d["box"], d["card"]
+    half = math.radians(box["yaw_deg"]) / 2
+    quat = [math.cos(half), 0, 0, math.sin(half)]
+    sx, sy, sz = [v / 1000 for v in box["size_mm"]]
+    top = box["top_z_mm"] / 1000
+    spec.worldbody.add_geom(name=box["name"], type=mujoco.mjtGeom.mjGEOM_BOX, size=[sx / 2, sy / 2, sz / 2],
+                            pos=[box["center_mm"][0] / 1000, box["center_mm"][1] / 1000, top - sz / 2], quat=quat,
+                            rgba=[0.66, 0.52, 0.36, 1], contype=0, conaffinity=0)
+    spec.worldbody.add_geom(name="card", type=mujoco.mjtGeom.mjGEOM_BOX,
+                            size=[card["size_mm"][0] / 2000, card["size_mm"][1] / 2000, 0.00025],
+                            pos=[card["center_mm"][0] / 1000, card["center_mm"][1] / 1000, top + 0.00025], quat=quat,
+                            rgba=[0.97, 0.96, 0.92, 1], contype=0, conaffinity=0)
+
+
+def build_model(paper=None, offscreen=(1280, 720), rig=False):
     paper = paper or Paper()
     spec = mujoco.MjSpec.from_file(str(XML))
     spec.visual.global_.offwidth, spec.visual.global_.offheight = offscreen
-    spec.worldbody.add_geom(
-        type=mujoco.mjtGeom.mjGEOM_BOX,
-        size=[paper.half_x, paper.half_y, max(paper.z, 1e-4) / 2],
-        pos=[paper.center_x, paper.center_y, max(paper.z, 1e-4) / 2],
-        rgba=[0.97, 0.96, 0.92, 1], contype=0, conaffinity=0,
-    )
+    if rig:
+        add_rig(spec)
+    else:
+        spec.worldbody.add_geom(
+            type=mujoco.mjtGeom.mjGEOM_BOX,
+            size=[paper.half_x, paper.half_y, max(paper.z, 1e-4) / 2],
+            pos=[paper.center_x, paper.center_y, max(paper.z, 1e-4) / 2],
+            rgba=[0.97, 0.96, 0.92, 1], contype=0, conaffinity=0,
+        )
     return spec.compile()
 
 

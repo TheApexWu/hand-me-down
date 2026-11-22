@@ -1,6 +1,6 @@
 # Arm Status
 
-Updated Sun 22 Nov 2026, 12:25. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
+Updated Sun 22 Nov 2026, 12:54. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
 
 ## Working
 
@@ -30,6 +30,13 @@ Updated Sun 22 Nov 2026, 12:25. Arm code is on `alex/arm-pen`. The arm stays on 
 5. Expect about 85-95 s per two- or three-line card at the current speed.
 6. Start `python -m card serve --lan` and send Alex the printed `arm_sync` line.
 7. Keep `require_tick` true for visitors. With no tick area set, every card counts as not OK to show and the rail stays empty. Draw a small "OK to show" box at the top right of each blank card, above the red line, then mark it with `python -m card layout`. Starting guess: `[0.86, 0.04, 0.08, 0.13]`.
+
+## Before pairing the laptops
+
+- Remove any job in the card laptop's `jobs/` that has no `done` file. The worker writes every unreplied job when it starts.
+- The arm side keeps `private/live/jobs` and `private/live/done` empty before the first sync.
+- A committed `tick: null` makes every card private. Mark the tick box before testing the real rail.
+- If the arm refuses a job, the operator sees NO REPLY after about 225 s, but the visitor screen stays on "writing". Add a timeout state there.
 
 ## Arm laptop start order
 

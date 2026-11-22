@@ -1,0 +1,41 @@
+{
+  "name": "riser_box_v1",
+  "updated": "2026-11-22 12:54",
+  "home_deg": {
+    "shoulder_pan": -0.26,
+    "shoulder_lift": 1.41,
+    "elbow_flex": 1.19,
+    "wrist_flex": -0.13,
+    "wrist_roll": -0.04
+  },
+  "joint_offsets_deg": {
+    "wrist_roll": 85.0
+  },
+  "control": {
+    "p_gain": 32,
+    "torque_limit": 800,
+    "rate_hz": 50
+  },
+  "pen": {
+    "length_mm": 45.4,
+    "first_ink_z_mm": 49.0,
+    "write_z_mm": 46.0,
+    "press_mm": 3.0,
+    "lift_mm": 8.0,
+    "draw_mm_s": 16.0,
+    "draw_accel_mm_s2": 120.0
+  },
+  "card": {
+    "center_mm": [212.5, 28.1],
+    "rotation_deg": 5.04,
+    "size_mm": [76.0, 127.0]
+  },
+  "box": {
+    "name": "riser_box",
+    "center_mm": [214.5, 28.1],
+    "yaw_deg": 5.04,
+    "size_mm": [75.0, 133.0, 52.0],
+    "top_z_mm": 49.0,
+    "source": "height from tape photo, footprint from top-down photo (about 3 mm), top from the ink ladder"
+  }
+}
