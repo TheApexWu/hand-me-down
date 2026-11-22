@@ -52,7 +52,7 @@ Wired on branch `alex/card-gate` at `17f58f1`, with the message bank, ready for 
 
 ## Quote mode: what the visitor receives
 
-The arm now writes only `quote`: an exact phrase from a real stranger's card, at most 3 words and 16 characters.
+The arm now writes only `quote`: an exact phrase from a real stranger's card, at most 3 words and 24 characters.
 
 - Build candidate phrases from Reducto's word boxes: 2-3 consecutive words in one written row, inside that limit after `clean()`.
 - Hermes must choose one candidate exactly. It may not rewrite, summarize or invent words.
