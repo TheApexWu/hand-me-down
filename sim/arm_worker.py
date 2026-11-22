@@ -50,6 +50,8 @@ MAX_PRESS = 4.0
 ARMD_PEN_MM, FLOOR_MM = 68.0, 35.0
 LIFT_OFF_DEG = 25.0
 
+WRITING_AREA = np.array([[575, 520], [1165, 510], [1150, 680], [625, 682]], np.int32)   # as in arm_mcp.py
+
 TYPOGRAPHY = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-",
               "…": "...", " ": " ", "~": "-"}
 
@@ -442,6 +444,43 @@ def open_jobs(root):
     return [p for p in jobs if not (root / "done" / p.name).exists()]
 
 
+def write_refused(root, name, why):
+    """Tell the card side, or its screen waits on this job forever."""
+    done = root / "done" / name
+    done.parent.mkdir(exist_ok=True)
+    tmp = done.with_name(f".{done.name}.tmp")
+    tmp.write_text(json.dumps({"refused": str(why)[:200], "delivered_at": None, "duration_s": None}))
+    os.replace(tmp, done)
+
+
+def wait_clear(timeout, top=None):
+    """Hold a live job until the visitor's card and hand are off the blank card and the view is still."""
+    import cv2
+    top = Path(top or pg.ROOT / "state" / "cam" / "top.jpg")
+    prev, calm, seen, end = None, 0, 0.0, time.monotonic() + timeout
+    while time.monotonic() < end:
+        try:
+            stamp = top.stat().st_mtime
+        except OSError:
+            stamp = seen
+        frame = cv2.imread(str(top)) if stamp != seen and time.time() - stamp < 3 else None
+        if frame is None:
+            time.sleep(0.08)
+            continue
+        seen = stamp
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        mask = np.zeros(gray.shape, np.uint8)
+        cv2.fillPoly(mask, [WRITING_AREA], 255)
+        blank = float(np.median(gray[mask > 0])) >= 150 and int(((gray < 75) & (mask > 0)).sum()) <= 200
+        soft = cv2.GaussianBlur(gray, (9, 9), 0)
+        still = prev is not None and float((cv2.absdiff(prev, soft)[470:720, 520:1220] > 25).mean()) < 0.01
+        calm = calm + 1 if blank and still else 0
+        prev = soft
+        if calm >= 3:
+            return True
+    return False
+
+
 def handle(path, root, a, planner, seen):
     try:
         stamp = path.stat().st_mtime_ns
@@ -467,12 +506,8 @@ def handle(path, root, a, planner, seen):
     except Refused as e:
         log(f"[{name}] REFUSED: {e}")
         seen[path.name] = stamp
-        if a.run or a.dry_done:     # tell the card side, or its screen waits on this job forever
-            done = root / "done" / path.name
-            done.parent.mkdir(exist_ok=True)
-            tmp = done.with_name(f".{done.name}.tmp")
-            tmp.write_text(json.dumps({"refused": str(e)[:200], "delivered_at": None, "duration_s": None}))
-            os.replace(tmp, done)
+        if a.run or a.dry_done:
+            write_refused(root, path.name, e)
         return
     try:
         unchanged = path.stat().st_mtime_ns == stamp and not (root / "done" / path.name).exists()
@@ -491,6 +526,16 @@ def handle(path, root, a, planner, seen):
     if ask({"c": "state"})["moving"]:
         log(f"[{name}] arm is busy: waiting")
         return
+    if a.wait_clear:
+        log(f"[{name}] waiting for a clear blank card")
+        if not wait_clear(a.wait_clear):
+            log(f"[{name}] REFUSED: no clear blank card")
+            seen[path.name] = stamp
+            write_refused(root, path.name, "no clear blank card on the box")
+            return
+        if not path.exists() or (root / "done" / path.name).exists():
+            log(f"[{name}] skipped: job was withdrawn while waiting")
+            return
     log(f"[{name}] writing")
     run_plan(root, path, plan)
     log(f"[{name}] delivered")
@@ -512,6 +557,7 @@ def main():
     ap.add_argument("--dry-done", action="store_true", help="dry mode only: write done/NNN.json")
     ap.add_argument("--once", action="store_true", help="one pass over the queue, then exit")
     ap.add_argument("--poll", type=float, default=1.0)
+    ap.add_argument("--wait-clear", type=float, default=0, help="live: hold each job up to S seconds for a clear blank card")
     a = ap.parse_args()
     if not 0 <= a.press <= MAX_PRESS:
         sys.exit(f"--press must be 0..{MAX_PRESS} mm")
