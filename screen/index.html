@@ -82,7 +82,9 @@
                mix-blend-mode: multiply; pointer-events: none; }
   #cands .archstamp { font-size: 1vh; border-width: .22vh; }
   .archbox { position: relative; max-width: 100%; }
-  .archtext { font: 5.2vh/1.15 var(--type); color: var(--ink); text-align: center; white-space: nowrap; }
+  /* one line, as large as fits: a quote can be up to 40 characters (--n is its length, set in fillArchive) */
+  .archtext { font-family: var(--type); line-height: 1.15; font-size: min(5.2vh, calc(94cqw / (var(--n, 12) * .62)));
+              color: var(--ink); text-align: center; white-space: nowrap; }
   .archlines { width: 80%; height: 46%; background: repeating-linear-gradient(to bottom, rgba(29, 27, 24, .2) 0 .55vh, transparent .55vh 2.1vh); }
 
   /* reading: a blank card under a scanning beam */
@@ -301,6 +303,7 @@
     if (text == null) { const bars = document.createElement('div'); bars.className = 'archlines'; area.appendChild(bars); return null; }
     const box = document.createElement('div'); box.className = 'archbox';
     const t = document.createElement('div'); t.className = 'archtext'; t.textContent = `“${text}”`; box.appendChild(t);
+    t.style.setProperty('--n', String([...text].length + 2));
     const nib = document.createElement('div'); nib.className = 'nib'; box.appendChild(nib);
     area.appendChild(box);
     return {archive: true, box, text: t, nib, markEls: []};
