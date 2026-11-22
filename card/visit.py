@@ -1,7 +1,7 @@
 """One visit: card photo -> Reducto -> (confirm) -> pick -> jobs/NNN.json for the arm."""
 import time
 
-from . import jobs, pick, quotes, read_card, store
+from . import gate, jobs, pick, quotes, read_card, store
 from .capture import read_image, save_card_photo
 
 
@@ -18,6 +18,26 @@ def ingest(frame=None, file=None, call=None):
 # Tests set this to skip the approval step where it isn't what they are about. Never set it in real use:
 # the arm writes the read text, and a misread must not reach it unchecked.
 TRUST_READS = False
+# Tests turn this on where the gate isn't the subject. Never set it in real use.
+TRUST_GATE = False
+
+
+def screen(card):
+    """The gate's result if this wording is held for a person, else None. Runs once per wording."""
+    line = card.get("line") or ""
+    if TRUST_GATE or not line or card.get("gate_released") == line:
+        return None
+    if (card.get("gate") or {}).get("text") != line:
+        card["gate"] = {**gate.check(line), "text": line}
+        store.save_card(card)
+    return card["gate"] if card["gate"]["hold"] else None
+
+
+def release(card):
+    """A person read a held card and decided it may go on the rail."""
+    card["gate_released"] = card.get("line") or ""
+    card["checked"] = True
+    return shelve(card)
 
 
 def approve(card, text=None):
@@ -29,7 +49,7 @@ def approve(card, text=None):
         card["corrected"] = True
         card["read_error"] = None
     card["checked"] = True
-    if card["status"] in ("unchecked", "unread", "unwritable"):
+    if card["status"] in ("unchecked", "unread", "unwritable", "held"):
         return shelve(card)
     return store.save_card(card)   # mid-visit: it is shelved when the visit ends
 
@@ -50,6 +70,8 @@ def shelve(card):
         card["status"] = "private"
     elif not card.get("line"):
         card["status"] = "unread"
+    elif screen(card):
+        card["status"] = "held"
     elif not card.get("checked"):
         card["status"] = "unchecked"   # waits for a person to compare the read with the handwriting
     elif quotes.cannot_give(card):
@@ -68,6 +90,9 @@ def discard(card):
 
 def give(visitor, exclude=(), **kw):
     """Choose a card for this visitor and write the job for the arm."""
+    held = screen(visitor)
+    if held:
+        raise jobs.NoJob("this card is held for a person: " + ", ".join(held["reasons"]))
     choice = pick.choose(visitor, exclude=exclude, **kw)
     stranger = store.load_card(choice["card_no"]) if choice["card_no"] else None
     if stranger and not stranger.get("may_show"):

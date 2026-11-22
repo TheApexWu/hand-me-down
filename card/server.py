@@ -177,6 +177,14 @@ class App:
             frame = cam.capture()  # the photo is taken before anything else moves
         store.set_state(stage="reading")
         card = visit.ingest(frame=frame, file=file, call=self.reducto_call)
+        held = visit.screen(card)   # before any of this card can reach the visitor screen
+        if held:
+            visit.shelve(card)
+            self.visitor, self.job = None, None
+            care = "; talk to this visitor and offer the 988 card" if "self_harm" in held["reasons"] else ""
+            self.error = f"Card {store.nnn(card['card_no'])} held for a person: {', '.join(held['reasons'])}{care}"
+            store.set_state(stage="idle")
+            return
         if seed:
             visit.shelve(card)
             store.set_state(stage="idle")
@@ -252,7 +260,7 @@ class App:
     def ink(self, card):
         """What the visitor screen shows of a card: its handwriting as ink, and the picture's size.
         Falls back to the photo cut if there is no ink cut-out. Nothing for a card not OK to show."""
-        if not (card and card.get("may_show")):
+        if not (card and card.get("may_show")) or card.get("status") == "held":
             return None, None
         if card.get("ink") and (store.BASE / card["ink"]).exists():
             return "/" + card["ink"], card.get("ink_size")
@@ -384,6 +392,8 @@ class App:
             "unread": [{**brief(c), "error": c.get("cannot_write") or c.get("read_error")}
                        for c in cards if c.get("status") in ("unread", "unwritable")],
             "unchecked": [{**brief(c), "img": self.img(c)} for c in cards if c.get("status") == "unchecked"],
+            "held": [{**brief(c), "img": self.img(c), "reasons": (c.get("gate") or {}).get("reasons", [])}
+                     for c in cards if c.get("status") == "held"],
             "given": sum(c.get("status") == "given" for c in cards),
             "private": sum(c.get("status") == "private" for c in cards),
             "layout": layout, "layout_measured": lay.measured(layout),
@@ -511,7 +521,7 @@ def make_handler(app):
                 if path.startswith(f"/{shared}/") and name.endswith(ok):
                     if shared == "cards":  # a card's pictures are served only if it is OK to show
                         card = store.load_card(name[:3]) if name[:3].isdigit() else None
-                        if not (card and card.get("may_show")):
+                        if not (card and card.get("may_show")) or (card.get("status") == "held" and not self.local()):
                             return self.send({"error": "not found"}, code=404)
                     return self.send_file(store.folder(shared) / name)
             if not self.local():
@@ -588,6 +598,11 @@ def make_handler(app):
                 if not card or not card.get("may_show"):
                     return self.send({"error": "no such card"}, code=404)
                 visit.approve(card, arg("text"))
+            elif path == "/api/release":
+                card = store.load_card(arg("card"))
+                if not card or card.get("status") != "held":
+                    return self.send({"error": "no held card"}, code=404)
+                visit.release(card)
             elif path == "/api/another":
                 ok = app.start(app.another)
             elif path == "/api/reread":

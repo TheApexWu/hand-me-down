@@ -15,10 +15,13 @@ from card import store
 def pytest_configure(config):
     config.addinivalue_line("markers", "live: needs the real Hermes container and a model call (HMD_LIVE=1)")
     config.addinivalue_line("markers", "strict_reads: reads need the operator's approval, as in real use")
+    config.addinivalue_line("markers", "strict_gate: cards go through the content gate, as in real use")
 
 
 @pytest.fixture(autouse=True)
 def data(tmp_path, monkeypatch, request):
+    from card import visit as gated
+    monkeypatch.setattr(gated, "TRUST_GATE", not request.node.get_closest_marker("strict_gate"))
     if request.node.get_closest_marker("live"):
         return tmp_path   # live checks talk to the real container, which shares the repo's own cache/turn
     monkeypatch.setattr(store, "BASE", tmp_path / "data")

@@ -54,6 +54,7 @@
       <h2>Rail <span id="counts" class="dim"></span></h2>
       <ul id="rail"></ul>
       <div id="check-wrap" hidden><h2 style="margin-top:12px" class="warn">Reads to check: compare with the handwriting, fix if wrong, then approve</h2><ul id="check"></ul></div>
+      <div id="held-wrap" hidden><h2 style="margin-top:12px" class="bad">Held for a person: read it before releasing</h2><ul id="held"></ul></div>
       <div id="unread-wrap" hidden><h2 style="margin-top:12px" class="warn">Not on the rail: unread, or the arm can't write it</h2><ul id="unread"></ul></div>
     </section>
   </div>
@@ -112,6 +113,8 @@
       $('check').dataset.cards = want;
       $('check').innerHTML = st.unchecked.map(c => `<li><span class="mono">${nnn(c.no)}</span>${c.img ? `<img class="crop" src="${c.img}?v=${v}" alt="">` : ''}<div class="row"><input type="text" data-check="${c.no}" value="${esc(c.line)}"><button data-approve="${c.no}">Approve</button></div></li>`).join('');
     }
+    $('held-wrap').hidden = !st.held.length;
+    $('held').innerHTML = st.held.map(c => `<li><span class="mono">${nnn(c.no)}</span> <span class="bad">${esc(c.reasons.join(', '))}</span>${c.reasons.includes('self_harm') ? ' <b>talk to this visitor and offer the 988 card</b>' : ''}${c.img ? `<img class="crop" src="${c.img}?v=${v}" alt="">` : ''}<div class="dim">${esc(c.line)}</div><div class="row"><button data-release="${c.no}">Release to rail</button></div></li>`).join('');
     $('unread-wrap').hidden = !st.unread.length;
     if (document.activeElement?.dataset.card === undefined)
       $('unread').innerHTML = st.unread.map(c => `<li><span class="mono">${nnn(c.no)}</span> <span class="dim">${esc(c.error)}</span><div class="row"><input type="text" data-card="${c.no}" placeholder="what it says"><button data-save="${c.no}">Save</button></div></li>`).join('');
@@ -146,6 +149,7 @@
   document.addEventListener('click', e => {
     const t = e.target;
     if (t.dataset.approve) { const i = document.querySelector(`input[data-check="${t.dataset.approve}"]`); i.blur(); post('/api/approve', {card: t.dataset.approve, text: i.value}); }
+    if (t.dataset.release) post('/api/release', {card: t.dataset.release});
     if (t.dataset.save) { const i = document.querySelector(`input[data-card="${t.dataset.save}"]`); if (i.value.trim()) { i.blur(); post('/api/fix', {card: t.dataset.save, text: i.value}); } }
   });
   document.addEventListener('keydown', e => {
