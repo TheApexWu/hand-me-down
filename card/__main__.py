@@ -157,7 +157,8 @@ def cmd_doctor(_):
     from . import gate   # without a working gate every card is held (it fails closed)
     label = gate.safety("I still miss the city I grew up in")
     ok(label == "ok", f"content gate answers (Hermes profile gate): {label}")
-    ok(bool(os.environ.get("PANGRAM_API_KEY")), "PANGRAM_API_KEY in the environment (without it nothing is flagged as AI-written)")
+    print("     pangram:", "in the live decision (can only hold a card for a person)" if gate.PANGRAM_LIVE else
+          "left out of the live decision (ready_to_claim was false); its key is only for python -m card.pangram_eval")
     probe = subprocess.run([sys.executable, "-c", "import card.body_server"], capture_output=True, text=True, cwd=store.ROOT)
     ok(probe.returncode == 0, "body server imports" + ("" if probe.returncode == 0 else ": " + probe.stderr[-300:]))
     print(f"     mode: {layout['mode']}   waiting on the rail: {len(store.waiting())}")

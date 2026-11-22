@@ -48,3 +48,20 @@ def test_safety_failure_holds_the_card(monkeypatch):
 def test_contact_details_are_not_sent_to_models(monkeypatch):
     monkeypatch.setattr(gate, "safety", lambda *a, **k: pytest.fail("contact details reached the model"))
     assert gate.check("call me at 917 555 0142")["reasons"] == ["contact details"]
+
+
+def test_pangram_is_left_out_of_the_live_decision_until_it_is_ready(monkeypatch):
+    monkeypatch.setattr(gate, "safety", lambda *a, **k: "ok")
+    monkeypatch.setattr(gate, "ai_check", lambda line: pytest.fail("a visitor's words were sent to Pangram"))
+    monkeypatch.setattr(gate, "PANGRAM_LIVE", False)
+    assert gate.check("a harmless line") == {"hold": False, "reasons": [], "safety": "ok",
+                                             "ai": {"checked": False, "why": "left out of the live decision"}}
+
+
+def test_when_pangram_is_live_it_can_only_hold_a_card_for_a_person(monkeypatch):
+    monkeypatch.setattr(gate, "safety", lambda *a, **k: "ok")
+    monkeypatch.setattr(gate, "ai_check", lambda line: {"checked": True, "prediction": "AI", "fraction_ai": 1.0})
+    monkeypatch.setattr(gate, "PANGRAM_LIVE", True)
+    held = visit.shelve(card(5))
+    assert held["status"] == "held" and held["gate"]["reasons"] == ["may be AI-written"]
+    assert visit.release(held)["status"] == "waiting"
