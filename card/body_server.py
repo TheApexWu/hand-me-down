@@ -30,7 +30,7 @@ def give(card: str, quote: str) -> str:
     pick, message = judge_give(turn, card, quote)
     if turn is not None:
         turn.setdefault("calls", []).append(
-            {"card": str(card), "quote": quote, "ok": bool(pick), "by": "tool", "message": message})
+            {"card": str(card), "quote": pick["quote"] if pick else quote, "ok": bool(pick), "by": "tool", "message": message})
         store.write_json(store.turn_file(), turn)
         if pick:
             store.write_json(store.pick_file(), pick)

@@ -83,3 +83,15 @@ def test_house_and_typed_test_jobs_still_write_their_line(card_photo, site):
     assert job["test"] and job["quote"] is None and job["line"] == "a line the two of us wrote by hand"
     _, house = visit.run(file=card_photo("v", "v"), call=reducto_says("the very first visitor"), is_online=True)
     assert house["house"] and house["quote"] is None and house["line"] == "a line the two of us wrote by hand"
+
+
+def test_a_gift_counts_even_if_the_pick_file_is_slow_to_appear(card_photo, monkeypatch):
+    """Docker on a Mac can show a file the container wrote a moment late: the turn's own record counts."""
+    for i, t in enumerate(["keeps the porch light on", "never learned to swim"]):
+        visit.run(file=card_photo(f"s{i}", t), seed=True, call=reducto_says(t)); time.sleep(0.01)
+    # a stand-in for Hermes that gives, then hides the pick file, as if it had not reached this side yet
+    hide = (f"{sys.executable} -c \"import json,sys; from card.body_server import give; from card import store; "
+            f"print(give('002', 'learned to swim')); store.pick_file().unlink()\" ")
+    monkeypatch.setattr(pick, "HERMES_CMD", hide)
+    _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("is afraid of deep water"), is_online=True)
+    assert job["picked_by"] == "hermes" and job["card_no"] == 2 and job["quote"] == "learned to swim"

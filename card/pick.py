@@ -71,7 +71,16 @@ def ask(visitor_line, lines, deadline=None, cmd=None, visitor_no=None):
 
     def my_pick():
         pick = store.read_json(store.pick_file())
-        return pick if pick and pick.get("turn") == turn["turn"] else None
+        if pick and pick.get("turn") == turn["turn"]:
+            return pick
+        # The body server writes the turn (with its calls) before the pick, and a file written in the
+        # container can take a moment to show on the Mac: an accepted call in the turn counts too.
+        now = store.read_json(store.turn_file()) or {}
+        if now.get("turn") == turn["turn"]:
+            ok = [c for c in now.get("calls", []) if c.get("ok") and c.get("by") == "tool"]
+            if ok:
+                return {"turn": turn["turn"], "card": store.norm_id(ok[-1]["card"]), "quote": ok[-1]["quote"], "by": "hermes"}
+        return None
 
     prompt, in_container = build_prompt(visitor_line, lines), not (cmd or HERMES_CMD)
     if in_container:
@@ -96,8 +105,11 @@ def ask(visitor_line, lines, deadline=None, cmd=None, visitor_no=None):
     try:
         while time.time() - started < deadline:
             exited = proc.poll() is not None
-            if exited:
-                time.sleep(0.2)  # let its last write land before the final look
+            if exited:   # let its last write reach this side (Docker on a Mac can take a moment) before the final look
+                for _ in range(25):
+                    if my_pick():
+                        break
+                    time.sleep(0.1)
             pick = my_pick()
             if pick:
                 if pick.get("card"):
