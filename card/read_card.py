@@ -161,7 +161,9 @@ def save_line_crop(card_img, bbox, dest, pad=0.3, row_h=None):
     if bbox:
         l, t, w, h = bbox
         py = min(row_h or h, h) * pad
-        px = py * H / W
+        # Wider at the sides: on real cards Reducto's box for a word can stop short of its last
+        # letters (it ended a third of the way through "nostra"), and a clipped word looks wrong.
+        px = min(row_h or h, h) * 1.2 * H / W
         x0, y0 = max(0, int((l - px) * W)), max(0, int((t - py) * H))
         x1, y1 = min(W, int((l + w + px) * W)), min(H, int((t + h + py) * H))
         if x1 - x0 > 8 and y1 - y0 > 8:
@@ -197,12 +199,13 @@ def clean_for_trace(bgr):
     return cleaned if dark(cleaned) >= 0.5 * dark(grey) else grey
 
 
-def save_trace_crop(line_png, dest, keep=None, margin=0.0):
+def save_trace_crop(line_png, dest, keep=None, margin=0.0, side=None):
     """Write the cleaned cut for the tracer.
 
-    keep: the words' boxes as fractions of this cut. Everything farther than margin (a fraction of
-    the cut's height) from every word is painted as paper, so the card's edge, its header rule or
-    something dark on the table at the rim of the cut can't be traced as writing.
+    keep: the words' boxes as fractions of this cut. Everything farther than margin above or below
+    every word, or farther than side to its left or right (both fractions of the cut's height), is
+    painted as paper, so the card's edge, its header rule or something dark on the table at the rim
+    of the cut can't be traced as writing. side is wider because a word's box can stop short.
     """
     img = cv2.imread(str(line_png))
     if img is None:
@@ -210,10 +213,10 @@ def save_trace_crop(line_png, dest, keep=None, margin=0.0):
     cleaned = clean_for_trace(img)
     if keep:
         H, W = cleaned.shape
-        m = int(margin * H)
+        m, sx = int(margin * H), int((side if side is not None else margin) * H)
         near = np.zeros((H, W), bool)
         for l, t, w, h in keep:
-            near[max(0, int(t * H) - m):int((t + h) * H) + m, max(0, int(l * W) - m):int((l + w) * W) + m] = True
+            near[max(0, int(t * H) - m):int((t + h) * H) + m, max(0, int(l * W) - sx):int((l + w) * W) + sx] = True
         cleaned[~near] = 235
     cv2.imwrite(str(dest), cleaned)
     return dest
@@ -228,7 +231,7 @@ def words_in_cut(card, row_h):
         return {}
     keep = [[(b[0] - rect[0]) / rect[2], (b[1] - rect[1]) / rect[3], b[2] / rect[2], b[3] / rect[3]]
             for b in (w["box"] for w in words)]
-    return {"keep": keep, "margin": 0.25 * row_h / rect[3]}
+    return {"keep": keep, "margin": 0.25 * row_h / rect[3], "side": 1.0 * row_h / rect[3]}
 
 
 def read(card, layout=None, call=None):

@@ -53,8 +53,13 @@ def quote_marks(quote, stranger, visitor):
         for s in range(len(toks) - len(q) + 1):
             if toks[s:s + len(q)] == q:
                 idx = sorted({i for _, i in flat[s:s + len(q)]})
-                box = read_card.union([stranger["words"][i]["box"] for i in idx])
-                marks["stranger"].append(to_crop(box, stranger["crop_rect"]))
+                rows = []                      # one box per written row, not one box across them all
+                for box in (stranger["words"][i]["box"] for i in idx):
+                    if rows and abs((box[1] + box[3] / 2) - (rows[-1][-1][1] + rows[-1][-1][3] / 2)) < box[3] / 2:
+                        rows[-1].append(box)
+                    else:
+                        rows.append([box])
+                marks["stranger"] += [to_crop(read_card.union(row), stranger["crop_rect"]) for row in rows]
                 break
     if visitor and visitor.get("words") and visitor.get("crop_rect"):
         shared = {t for t in q if len(t) >= 4}  # skip "and", "the"

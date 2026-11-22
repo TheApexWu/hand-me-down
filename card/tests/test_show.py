@@ -101,3 +101,13 @@ def test_an_unticked_visitor_gets_a_gift_but_never_appears_on_the_screen(card_ph
     assert SECRET not in json.dumps(states) and SECRET not in get("/state.json")[1].decode()
     assert store.load_card(visitor["card_no"])["status"] == "private"
     assert app.job["card_no"] == shown["card_no"] and app.job["picked_by"] == "hermes"
+
+
+def test_a_quote_over_two_written_rows_gets_a_box_on_each_row():
+    from card.server import quote_marks
+    words = [{"text": t, "box": b} for t, b in (("keeps", [0.10, 0.30, 0.15, 0.08]), ("the", [0.30, 0.30, 0.08, 0.08]),
+                                                 ("porch", [0.10, 0.45, 0.15, 0.08]), ("light", [0.30, 0.45, 0.14, 0.08]))]
+    stranger = {"words": words, "crop_rect": [0.0, 0.2, 1.0, 0.4]}
+    marks = quote_marks("the porch light", stranger, None)["stranger"]
+    assert len(marks) == 2                                               # "the" on row one, "porch light" on row two
+    assert marks[0][0] == 0.3 and abs(marks[1][0] - 0.1) < 1e-6 and marks[1][1] > marks[0][1]
