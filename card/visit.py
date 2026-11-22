@@ -1,16 +1,14 @@
 """One visit: card photo -> Reducto -> (confirm) -> pick -> jobs/NNN.json for the arm."""
 import time
 
-import cv2
-
 from . import jobs, pick, read_card, store
-from .capture import save_card_photo
+from .capture import read_image, save_card_photo
 
 
 def ingest(frame=None, file=None, call=None):
     """Save the photo, square up the card, read it. Returns the new card record."""
     if frame is None:
-        frame = cv2.imread(str(file))
+        frame = read_image(file)
         if frame is None:
             raise ValueError(f"not an image: {file}")
     card = save_card_photo(frame)  # the photo is on disk before anything else happens

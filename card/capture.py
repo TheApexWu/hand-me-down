@@ -145,6 +145,16 @@ class Recorder:
         self.thread.join(timeout=3)
 
 
+def read_image(path):
+    """A photo from disk. iPhone photos arrive as HEIC, which OpenCV can't open; macOS's sips converts them."""
+    img = cv2.imread(str(path))
+    if img is None and str(path).lower().endswith((".heic", ".heif")):
+        out = store.folder("cache/tmp") / (os.path.basename(str(path)).rsplit(".", 1)[0] + ".jpg")
+        subprocess.run(["sips", "-s", "format", "jpeg", str(path), "--out", str(out)], capture_output=True, timeout=30)
+        img = cv2.imread(str(out))
+    return img
+
+
 def save_card_photo(frame, card_no=None, layout=None):
     """Save the frame as cards/NNN.jpg and the squared-up card as cards/NNN_card.jpg.
 

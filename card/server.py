@@ -103,7 +103,8 @@ class App:
 
     def frame(self):
         if self.image:
-            return cv2.imread(str(self.image))
+            from .capture import read_image
+            return read_image(self.image)
         cam = self.cam()
         return cam.latest() if cam else None
 

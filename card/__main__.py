@@ -23,18 +23,56 @@ from . import hermes, pick, read_card, store, visit
 
 
 def cmd_visit(args):
+    """Whole visits from photos. If photo.txt sits next to photo.jpg and holds what the card really
+    says, the read is scored against it. Ends with a summary: accuracy, seconds, every failure."""
+    import difflib
+    import statistics
+    from pathlib import Path
+    from .quote import words
+    took_all, scores, failures = [], [], []
     for f in args.files:
         t = time.time()
-        card, job = visit.run(file=f)
+        try:
+            card, job = visit.run(file=f)
+        except Exception as exc:
+            failures.append(f"{f}: {type(exc).__name__}: {exc}")
+            print(f"\n{f}: FAILED {type(exc).__name__}: {exc}")
+            continue
         took = time.time() - t
+        took_all.append(took)
         print(f"\n{f}: card {store.nnn(card['card_no'])} read via {card.get('read_source') or 'nothing'}: "
               f"{card.get('line')!r} {card.get('read_error') or ''}")
+        print(f"  ok to show: {card.get('ok_to_show')}  ->  {'on the rail' if card['status'] == 'waiting' else card['status']}")
+        truth = Path(f).with_suffix(".txt")
+        if truth.exists():
+            want, got = words(truth.read_text()), words(card.get("line") or "")
+            score = difflib.SequenceMatcher(None, want, got).ratio() if want else 0.0
+            scores.append(score)
+            print(f"  read accuracy: {score:.0%} of words" + ("" if want == got else f"   expected {truth.read_text().strip()!r}"))
+            if want != got:
+                failures.append(f"{f}: misread ({score:.0%}): got {card.get('line')!r}")
         print(f"  -> jobs/{store.nnn(job['card_no'])}.json  picked_by={job['picked_by']}  mode={job['mode']}  "
               f"{took:.1f} s {'OK' if took < 15 else 'SLOW (over 15 s)'}")
         print("  " + json.dumps({k: job[k] for k in ("card_no", "line", "crop", "bbox", "quote", "picked_by",
                                                       "written_at", "mode")}, ensure_ascii=False))
         if job.get("why"):
             print("  why:", job["why"])
+        if card.get("read_error"):
+            failures.append(f"{f}: {card['read_error']}")
+        if took >= 15:
+            failures.append(f"{f}: took {took:.1f} s")
+        if job["picked_by"] != "hermes":
+            failures.append(f"{f}: picked by {job['picked_by']} ({job.get('why')})")
+    print(f"\n=== {len(args.files)} photo(s)")
+    if took_all:
+        print(f"seconds per visit: min {min(took_all):.1f}  median {statistics.median(took_all):.1f}  max {max(took_all):.1f}")
+    if scores:
+        print(f"read accuracy: {sum(s == 1 for s in scores)} of {len(scores)} lines exact, mean {statistics.mean(scores):.0%} of words")
+    else:
+        print("read accuracy: not scored (put the true line in photo.txt next to each photo)")
+    print("failures: " + ("none" if not failures else ""))
+    for line in failures:
+        print("  -", line)
 
 
 def cmd_seed(args):
