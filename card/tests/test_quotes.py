@@ -6,7 +6,7 @@ import time
 import pytest
 
 from card import jobs, pick, quotes, store, visit
-from card.pen import MAX_QUOTE_CHARS, pen_text
+from card.pen import MAX_QUOTE_CHARS, pen_text, without_end_marks
 from card.quote import judge_give, quote_on_card
 from card.tests.conftest import reducto_says
 
@@ -112,3 +112,14 @@ def test_a_negation_inside_the_phrase_is_kept():
                                         ("Keep pushing. You'll come out of this stronger I promise", "Keep pushing.")])
 def test_the_rule_gives_a_complete_sounding_phrase(line, want):
     assert quotes.default({"line": line})["text"] == want
+
+
+def test_a_short_card_is_given_whole():
+    assert [p["text"] for p in quotes.phrases_from_text("Don't Give Up!!")] == ["Don't Give Up!!"]
+
+
+def test_end_marks_are_not_inked(card_photo):
+    assert without_end_marks("Keep pushing.") == "Keep pushing"
+    visit.run(file=card_photo("s", "x"), seed=True, call=reducto_says("Don't Give Up!!"))
+    _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("I feel lost"), is_online=False)
+    assert job["quote"] == "Don't Give Up" and job["line"] == "Don't Give Up!!"

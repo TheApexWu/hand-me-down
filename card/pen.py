@@ -10,6 +10,11 @@ TYPOGRAPHY = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—":
 MAX_QUOTE_WORDS, MAX_QUOTE_CHARS = 3, 24
 
 
+def without_end_marks(text):
+    """Tiny lifted marks are the pen's hardest move, so a quote is inked as its words only."""
+    return " ".join(w for w in (w.rstrip("!?.,;:") for w in text.split()) if w)
+
+
 def pen_text(text):
     """The text as the arm's pen font will see it, and the characters it has no glyph for."""
     for a, b in TYPOGRAPHY.items():

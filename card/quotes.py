@@ -66,7 +66,8 @@ def _from(texts, rows, boxes=None):
                     continue
                 seen.add(key)
                 out.append({"text": text, "words": idx, "row": r, "box": _union([boxes[i] for i in idx]) if boxes else None})
-    return out
+    whole = [p for p in out if len(p["words"]) == len(texts)]    # a short card goes whole, never cut to "Don't Give"
+    return whole or out
 
 
 def phrases(card):

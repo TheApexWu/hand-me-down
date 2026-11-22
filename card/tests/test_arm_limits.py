@@ -49,7 +49,7 @@ def test_correcting_the_line_can_put_the_card_on_the_rail(card_photo):
     card = seed(card_photo, "love❤ hugs❤ always❤")                   # every phrase has a mark the pen cannot draw
     assert card["status"] == "unwritable"
     fixed = visit.fix_line(store.load_card(card["card_no"]), "with love always")
-    assert fixed["status"] == "waiting" and "cannot_write" not in fixed and "with love" in fixed["phrases"]
+    assert fixed["status"] == "waiting" and "cannot_write" not in fixed and "with love always" in fixed["phrases"]
 
 
 def test_no_job_is_written_for_the_placeholder_house_line(card_photo):
