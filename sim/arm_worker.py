@@ -467,6 +467,12 @@ def handle(path, root, a, planner, seen):
     except Refused as e:
         log(f"[{name}] REFUSED: {e}")
         seen[path.name] = stamp
+        if a.run or a.dry_done:     # tell the card side, or its screen waits on this job forever
+            done = root / "done" / path.name
+            done.parent.mkdir(exist_ok=True)
+            tmp = done.with_name(f".{done.name}.tmp")
+            tmp.write_text(json.dumps({"refused": str(e)[:200], "delivered_at": None, "duration_s": None}))
+            os.replace(tmp, done)
         return
     try:
         unchanged = path.stat().st_mtime_ns == stamp and not (root / "done" / path.name).exists()
