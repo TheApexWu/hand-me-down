@@ -1,6 +1,6 @@
 # Arm Status
 
-Updated Sun 22 Nov 2026, 13:43. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
+Updated Sun 22 Nov 2026, 13:56. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
 
 ## Working
 
@@ -26,6 +26,19 @@ For the arm-offline switch: `git show origin/alex/arm-pen:docs/hand-me-down-sim-
 - `mode: "trace"` is not implemented on the arm. It falls back to font and writes `line`.
 - The arm worker does not send a `refused` reply yet. The card side already accepts one.
 - Pen height is one value for the whole card (first ink 49 mm, writing 46 mm). Moving the riser or pen means measuring it again.
+
+## Card gate and the three Hermes roles
+
+`card/gate.py` screens a card before it can join the rail. It can hold a card for a person and never rejects one.
+
+1. **Gate Hermes:** no tools. Labels each card ok, self_harm, threat, hate, sexual or private_info. Any failure holds the card.
+2. **Chooser Hermes:** only `give`. Picks an exact short phrase from a card that passed.
+3. **Arm Hermes:** five bounded tools. Never sees card text.
+
+- Phone numbers, emails, links and handles are held by rule and are not sent onward.
+- Tested on 11 lines: 5 ordinary painful notes passed, and 6 harmful, private or prompt-injection lines were held. A broken Hermes command also held the card. This is a small test.
+- Pangram is wired in but **not tested**, because this laptop has no Pangram key. Do not claim it in the pitch until it has been tested on real short cards. It may only flag a card for review.
+- A held card stays off the rail and public screen until the operator releases it. If it suggests self-harm, a person talks to the visitor. Nothing is sent automatically.
 
 ## Quote mode: what the visitor receives
 
