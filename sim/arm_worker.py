@@ -33,13 +33,13 @@ MARGIN = 8.0
 FIT_MARGIN = 8.2                     # FK lands a few hundredths off the layout; 8.0 must survive that
 RED_LINE_V = 24.0                    # same header position as demo_twin
 TEXT_V = (-(CARD_V / 2 - FIT_MARGIN), RED_LINE_V - 2.0)
-CAP_MAX, CAP_MIN, CAP_STEP = 10.0, 6.0, 0.25
-MAX_LINES, PITCH = 3, 1.6
+CAP_MAX, CAP_MIN, CAP_STEP = 18.0, 6.0, 0.25
+MAX_LINES, PITCH = 3, 1.45
 FONT_CAP = 21.0
 
 HOVER_Z, LIFT = 95.0, 8.0
-DRAW, TRAVEL, DESCEND = 16.0, 75.0, 25.0          # mm/s
-A_DRAW, A_TRAVEL, A_DESCEND = 120.0, 700.0, 300.0 # mm/s^2
+DRAW, TRAVEL, DESCEND = 24.0, 75.0, 25.0          # mm/s
+A_DRAW, A_TRAVEL, A_DESCEND = 270.0, 700.0, 300.0 # mm/s^2
 IK_STEP, CORNER_COS = 2.0, np.cos(np.radians(30))
 PLAN_STEP, ARMD_STEP = 1.0, 1.2                   # deg/tick: plan with slack under armd's refusal
 PLACEHOLDER_FIRST_INK = 2.0
@@ -108,23 +108,21 @@ def layout(text):
     """Largest cap height that fits, as card-centred (u, v) strokes with +v toward the red line."""
     words, width = text.split(), CARD_U - 2 * FIT_MARGIN
     for cap in np.arange(CAP_MAX, CAP_MIN - 1e-9, -CAP_STEP):
-        lines = wrap(words, float(cap), width)
-        if lines:
-            break
-    else:
-        raise Refused(f"does not fit in {MAX_LINES} lines at {CAP_MIN:.0f} mm cap height ({len(text)} chars)")
-    cap, pitch = float(cap), float(cap) * PITCH
-    block = cap + pitch * (len(lines) - 1)
-    top = (TEXT_V[0] + TEXT_V[1] + block) / 2
-    strokes = []
-    for i, line in enumerate(lines):
-        row = glyphs(line, cap)
-        u = np.vstack(row)[:, 0]
-        strokes += [s + [-(u.min() + u.max()) / 2, top - cap - i * pitch] for s in row]
-    pts = np.vstack(strokes)
-    if pts[:, 1].min() < TEXT_V[0] or pts[:, 1].max() > TEXT_V[1]:
-        raise Refused(f"text block leaves the writing area at {cap:.2f} mm cap height")
-    return strokes, lines, cap
+        cap = float(cap)
+        lines = wrap(words, cap, width)
+        if not lines:
+            continue
+        pitch = cap * PITCH
+        top = (TEXT_V[0] + TEXT_V[1] + cap + pitch * (len(lines) - 1)) / 2
+        strokes = []
+        for i, line in enumerate(lines):
+            row = glyphs(line, cap)
+            u = np.vstack(row)[:, 0]
+            strokes += [s + [-(u.min() + u.max()) / 2, top - cap - i * pitch] for s in row]
+        pts = np.vstack(strokes)
+        if pts[:, 1].min() >= TEXT_V[0] and pts[:, 1].max() <= TEXT_V[1]:     # width alone can pick a block too tall
+            return strokes, lines, cap
+    raise Refused(f"does not fit in {MAX_LINES} lines at {CAP_MIN:.0f} mm cap height ({len(text)} chars)")
 
 
 def knots(poly):

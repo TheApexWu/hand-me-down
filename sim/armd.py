@@ -128,6 +128,13 @@ class Server:
             return self.state()
         if self.q:
             raise Refused("arm is moving: send stop first")
+        if c == "gains":
+            for key, reg, top in (("p", "P_Coefficient", 64), ("i", "I_Coefficient", 16), ("d", "D_Coefficient", 64)):
+                if key in m:
+                    for j in J[:4]:
+                        self.r.bus.write(reg, j, max(0, min(int(m[key]), top)), normalize=False)
+            return {**self.state(), "gains": {reg: self.r.bus.sync_read(reg, J[:4], normalize=False)
+                                              for reg in ("P_Coefficient", "I_Coefficient", "D_Coefficient")}}
         speed = max(1.0, min(float(m.get("speed", 20)), 40.0))
         if c == "up":
             if self.z(self.goal) < FLOOR_MM:

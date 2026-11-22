@@ -22,19 +22,34 @@
     "write_z_mm": 46.0,
     "press_mm": 3.0,
     "lift_mm": 8.0,
-    "draw_mm_s": 16.0,
-    "draw_accel_mm_s2": 120.0
+    "draw_mm_s": 24.0,
+    "draw_accel_mm_s2": 270.0,
+    "max_cap_mm": 18.0,
+    "line_pitch": 1.45
   },
   "card": {
-    "center_mm": [212.5, 28.1],
+    "center_mm": [
+      212.5,
+      28.1
+    ],
     "rotation_deg": 5.04,
-    "size_mm": [76.0, 127.0]
+    "size_mm": [
+      76.0,
+      127.0
+    ]
   },
   "box": {
     "name": "riser_box",
-    "center_mm": [214.5, 28.1],
+    "center_mm": [
+      214.5,
+      28.1
+    ],
     "yaw_deg": 5.04,
-    "size_mm": [75.0, 133.0, 52.0],
+    "size_mm": [
+      75.0,
+      133.0,
+      52.0
+    ],
     "top_z_mm": 49.0,
     "source": "height from tape photo, footprint from top-down photo (about 3 mm), top from the ink ladder"
   }
