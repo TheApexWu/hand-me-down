@@ -5,3 +5,12 @@ __pycache__/
 .DS_Store
 hermes-install.sh
 sim/traj*.json
+
+# card side: runtime data (photos of visitors' cards stay off the repo)
+.env
+cards/
+jobs/
+done/
+cache/
+runs/
+.pytest_cache/
