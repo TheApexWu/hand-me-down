@@ -34,6 +34,8 @@ def cmd_visit(args):
         t = time.time()
         try:
             card, job = visit.run(file=f)
+            if args.approve:
+                card = visit.approve(card)
         except Exception as exc:
             failures.append(f"{f}: {type(exc).__name__}: {exc}")
             print(f"\n{f}: FAILED {type(exc).__name__}: {exc}")
@@ -83,7 +85,12 @@ def cmd_visit(args):
 def cmd_seed(args):
     for f in args.files:
         card, _ = visit.run(file=f, seed=True)
+        if args.approve:
+            card = visit.approve(card)
         print(store.nnn(card["card_no"]), card["status"], repr(card.get("line")), card.get("read_error") or "")
+    if not args.approve:
+        print("These reads are unchecked, so the cards are not on the rail yet. Compare each with its card, then "
+              "approve them on the operator page, or seed again with --approve if you already have.")
 
 
 def cmd_rail(_):
@@ -153,6 +160,9 @@ def main():
         s.add_argument("--image", help="use a photo in place of the camera")
     v = sub.add_parser("visit"); v.add_argument("files", nargs="+"); v.set_defaults(fn=cmd_visit)
     sd = sub.add_parser("seed"); sd.add_argument("files", nargs="+"); sd.set_defaults(fn=cmd_seed)
+    for cmd in (v, sd):
+        cmd.add_argument("--approve", action="store_true",
+                         help="you have compared each read with its card and it is right: put the cards on the rail")
     sub.add_parser("rail").set_defaults(fn=cmd_rail)
     w = sub.add_parser("warm"); w.add_argument("n", type=int, nargs="?", default=1); w.set_defaults(fn=cmd_warm)
     h = sub.add_parser("hermes"); h.add_argument("action", choices=["up", "check", "down"]); h.add_argument("--purge", action="store_true"); h.set_defaults(fn=cmd_hermes)

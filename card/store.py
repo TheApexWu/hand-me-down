@@ -116,11 +116,11 @@ def next_no():
 
 
 def waiting(exclude=()):
-    """Cards that can be given: still waiting, readable, OK to show, oldest first."""
+    """Cards that can be given: still waiting, readable, OK to show, read checked by a person, oldest first."""
     exclude = {int(x) for x in exclude}
     return [c for c in all_cards()
             if c.get("status") == "waiting" and c.get("line") and c.get("may_show") is True
-            and c["card_no"] not in exclude]
+            and c.get("checked") is True and c["card_no"] not in exclude]
 
 
 # run state (shared with the body server, the hook and the screen) ---------------

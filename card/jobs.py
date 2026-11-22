@@ -74,6 +74,8 @@ def write(pick, visitor, layout=None):
         raise PermissionError(f"card {store.nnn(stranger['card_no'])} is not OK to show; no job is written for it")
     if stranger:
         n = stranger["card_no"]
+        if not stranger.get("checked"):
+            raise NoJob(f"card {store.nnn(n)}'s read has not been checked by a person")
         problem = cannot_write(stranger["line"], layout)
         if problem:
             raise NoJob(f"card {store.nnn(n)} can't be written: {problem}")

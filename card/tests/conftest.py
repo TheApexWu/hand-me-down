@@ -14,6 +14,7 @@ from card import store
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "live: needs the real Hermes container and a model call (HMD_LIVE=1)")
+    config.addinivalue_line("markers", "strict_reads: reads need the operator's approval, as in real use")
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +23,9 @@ def data(tmp_path, monkeypatch, request):
         return tmp_path   # live checks talk to the real container, which shares the repo's own cache/turn
     monkeypatch.setattr(store, "BASE", tmp_path / "data")
     monkeypatch.setenv("HMD_DATA", str(tmp_path / "data"))
+    from card import visit
+    # Most tests are not about the operator's approval of a read; test_approve.py turns it back on.
+    monkeypatch.setattr(visit, "TRUST_READS", not request.node.get_closest_marker("strict_reads"))
     monkeypatch.setattr(lay, "FILE", tmp_path / "layout.json")   # tests never touch the real layout
     # Most tests are about the flow, on cards with no tick box: say so the way a team would, in the layout.
     # test_show.py turns the tick back on.

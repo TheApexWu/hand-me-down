@@ -34,7 +34,7 @@
       <div class="view"><img id="preview" alt=""><svg id="overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg></div>
       <div class="row" style="margin-top:10px">
         <button class="main" id="b-visit">Visit<kbd>space</kbd></button>
-        <button id="b-yes">Right<kbd>y</kbd></button>
+        <button id="b-yes">Read is right: go<kbd>y</kbd></button>
         <button id="b-no">Retake<kbd>n</kbd></button>
         <button id="b-another">Another one<kbd>a</kbd></button>
         <button id="b-seed">Seed the rail<kbd>s</kbd></button>
@@ -53,6 +53,7 @@
     <section>
       <h2>Rail <span id="counts" class="dim"></span></h2>
       <ul id="rail"></ul>
+      <div id="check-wrap" hidden><h2 style="margin-top:12px" class="warn">Reads to check: compare with the handwriting, fix if wrong, then approve</h2><ul id="check"></ul></div>
       <div id="unread-wrap" hidden><h2 style="margin-top:12px" class="warn">Not on the rail: unread, or the arm can't write it</h2><ul id="unread"></ul></div>
     </section>
   </div>
@@ -105,6 +106,12 @@
     $('overlay').innerHTML = (st.layout_measured ? poly(L.corners, '#7fd1a0') : '') + poly(L.page, '#6aa9ff');
     $('counts').textContent = `· ${st.rail.length} waiting · ${st.given} given · ${st.private} kept private`;
     $('rail').innerHTML = st.rail.map(c => `<li><span class="dim mono">${nnn(c.no)} ${c.at || ''}</span> ${esc(c.line)}${c.name ? ` <span class="dim">· ${esc(c.name)}</span>` : ''}${c.ok === true ? ' <span class="go">☑</span>' : ''}${c.corrected ? ' <span class="warn">(corrected)</span>' : ''}</li>`).join('') || '<li class="dim">empty: seed it before the first visitor, or they get the house line</li>';
+    $('check-wrap').hidden = !st.unchecked.length;
+    const want = st.unchecked.map(c => c.no).join(',');
+    if ($('check').dataset.cards !== want && document.activeElement?.dataset.check === undefined) {
+      $('check').dataset.cards = want;
+      $('check').innerHTML = st.unchecked.map(c => `<li><span class="mono">${nnn(c.no)}</span>${c.img ? `<img class="crop" src="${c.img}?v=${v}" alt="">` : ''}<div class="row"><input type="text" data-check="${c.no}" value="${esc(c.line)}"><button data-approve="${c.no}">Approve</button></div></li>`).join('');
+    }
     $('unread-wrap').hidden = !st.unread.length;
     if (document.activeElement?.dataset.card === undefined)
       $('unread').innerHTML = st.unread.map(c => `<li><span class="mono">${nnn(c.no)}</span> <span class="dim">${esc(c.error)}</span><div class="row"><input type="text" data-card="${c.no}" placeholder="what it says"><button data-save="${c.no}">Save</button></div></li>`).join('');
@@ -112,7 +119,8 @@
     $('vtext').textContent = vis ? (vis.private ? 'kept private: “OK to show” is not ticked' : vis.line || vis.error || 'reading…') : 'no card yet';
     $('vtext').className = 'big ' + (vis ? (vis.private ? 'warn' : vis.line ? '' : 'bad') : 'dim');
     setImg($('vcrop'), vis && vis.img, v);
-    $('vmeta').textContent = vis ? [vis.source && 'read via ' + vis.source, vis.name && 'from ' + vis.name, vis.ok === true ? 'OK to show: ticked' : vis.ok === false ? 'OK to show: not ticked' : '', vis.error && vis.line ? vis.error : ''].filter(Boolean).join(' · ') : '';
+    $('vmeta').textContent = vis ? [vis.private ? '' : vis.checked ? 'read approved' : 'READ NOT CHECKED YET: compare it with the handwriting',
+      vis.source && 'read via ' + vis.source, vis.name && 'from ' + vis.name, vis.ok === true ? 'OK to show: ticked' : vis.ok === false ? 'OK to show: not ticked' : '', vis.error && vis.line ? vis.error : ''].filter(Boolean).join(' · ') : '';
     $('pick').textContent = j ? `· jobs/${nnn(j.card_no)}.json · ${j.picked_by} · ${j.mode} · ${j.pick_secs}s` + (delivered ? ' · delivered' : st.done ? ' · REFUSED' : s.stage === 'held' ? ' · no reply' : ' · waiting for the arm') : '';
     $('pick').className = j && j.picked_by !== 'hermes' ? 'warn' : 'go';
     $('gtext').textContent = j ? j.line : 'nothing chosen'; $('gtext').className = 'big ' + (j ? '' : 'dim');
@@ -123,7 +131,7 @@
 
   $('b-visit').onclick = () => post('/api/capture');
   $('b-seed').onclick = () => post('/api/capture', {seed: true});
-  $('b-yes').onclick = () => post('/api/confirm', {yes: true});
+  $('b-yes').onclick = () => post('/api/confirm', {yes: true, approve: true, text: $('fix').value.trim() || undefined}).then(() => $('fix').value = '');
   $('b-no').onclick = () => post('/api/confirm', {yes: false});
   $('b-another').onclick = () => post('/api/another');
   $('b-clear').onclick = () => post('/api/clear');
@@ -137,9 +145,11 @@
   $('b-reread').onclick = () => st?.visitor && post('/api/reread', {card: st.visitor.no});
   document.addEventListener('click', e => {
     const t = e.target;
+    if (t.dataset.approve) { const i = document.querySelector(`input[data-check="${t.dataset.approve}"]`); i.blur(); post('/api/approve', {card: t.dataset.approve, text: i.value}); }
     if (t.dataset.save) { const i = document.querySelector(`input[data-card="${t.dataset.save}"]`); if (i.value.trim()) { i.blur(); post('/api/fix', {card: t.dataset.save, text: i.value}); } }
   });
   document.addEventListener('keydown', e => {
+    if (e.target.dataset?.check !== undefined && e.key === 'Enter') { e.target.blur(); post('/api/approve', {card: e.target.dataset.check, text: e.target.value}); return; }
     if (e.target.tagName === 'INPUT' || e.metaKey || e.ctrlKey) return;
     const b = {' ': 'b-visit', s: 'b-seed', y: 'b-yes', n: 'b-no', a: 'b-another', c: 'b-clear', r: 'b-rec', m: 'b-sim', w: 'b-withdraw'}[e.key];
     if (b) { e.preventDefault(); if (!$(b).disabled) $(b).click(); }

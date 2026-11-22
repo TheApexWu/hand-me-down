@@ -155,7 +155,9 @@ class App:
         else:  # not OK to show: nothing of this card goes on the screen, so there is nothing to confirm
             self.choose(card)
 
-    def confirm(self, yes):
+    def confirm(self, yes, approve=False, text=None):
+        """The visitor says the cut is their line (yes), or asks for a retake. approve is the operator's
+        part: they have compared the read with the handwriting, and may have typed a correction."""
         card = store.load_card(self.visitor) if self.visitor else None
         if not card or store.state().get("stage") != "confirm":
             return
@@ -164,6 +166,8 @@ class App:
             self.visitor = None
             store.set_state(stage="idle")
             return
+        if approve:
+            card = visit.approve(card, text)
         self.choose(card)
 
     def choose(self, card):
@@ -284,7 +288,8 @@ class App:
                 return {"no": c["card_no"], "line": "", "name": None, "ok": c.get("ok_to_show"), "private": True,
                         "error": None, "corrected": False, "at": c.get("written_at")}
             return {"no": c["card_no"], "line": c.get("line", ""), "name": c.get("name"), "ok": c.get("ok_to_show"),
-                    "error": c.get("read_error"), "corrected": c.get("corrected", False), "at": c.get("written_at")}
+                    "error": c.get("read_error"), "corrected": c.get("corrected", False), "at": c.get("written_at"),
+                    "checked": bool(c.get("checked"))}
         cards = store.all_cards()
         visitor = store.load_card(self.visitor) if self.visitor else None
         layout = lay.load()
@@ -297,6 +302,7 @@ class App:
             "rail": [brief(c) for c in cards if c.get("status") == "waiting"],
             "unread": [{**brief(c), "error": c.get("cannot_write") or c.get("read_error")}
                        for c in cards if c.get("status") in ("unread", "unwritable")],
+            "unchecked": [{**brief(c), "img": self.img(c)} for c in cards if c.get("status") == "unchecked"],
             "given": sum(c.get("status") == "given" for c in cards),
             "private": sum(c.get("status") == "private" for c in cards),
             "layout": layout, "layout_measured": lay.measured(layout),
@@ -466,8 +472,14 @@ def make_handler(app):
                 file = arg("file")
                 ok = app.start(lambda: app.capture(seed=seed, file=file))
             elif path == "/api/confirm":
-                yes = str(arg("yes")) in ("1", "true", "True")
-                ok = app.start(lambda: app.confirm(yes))
+                yes, approve = (str(arg(k)) in ("1", "true", "True") for k in ("yes", "approve"))
+                text = arg("text")
+                ok = app.start(lambda: app.confirm(yes, approve=approve, text=text))
+            elif path == "/api/approve":
+                card = store.load_card(arg("card"))
+                if not card or not card.get("may_show"):
+                    return self.send({"error": "no such card"}, code=404)
+                visit.approve(card, arg("text"))
             elif path == "/api/another":
                 ok = app.start(app.another)
             elif path == "/api/reread":

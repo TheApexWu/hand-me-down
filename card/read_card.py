@@ -247,6 +247,7 @@ def read(card, layout=None, call=None):
                     read_error=None if got["line"] else "no handwritten line found")
     except Exception as exc:
         card["read_error"] = f"{type(exc).__name__}: {exc}"[:160]
+    card["checked"] = False   # a fresh read: no person has compared it with the handwriting yet
     card["ok_to_show"] = lay.tick_is_marked(cv2.imread(str(img_path)), layout)
     card["may_show"] = lay.may_show(card["ok_to_show"], layout)  # decided once, here, from the paper
     heights = sorted(w["box"][3] for w in card.get("words") or [] if w.get("box"))

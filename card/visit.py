@@ -15,14 +15,28 @@ def ingest(frame=None, file=None, call=None):
     return read_card.read(card, call=call)
 
 
+# Tests set this to skip the approval step where it isn't what they are about. Never set it in real use:
+# the arm writes the read text, and a misread must not reach it unchecked.
+TRUST_READS = False
+
+
+def approve(card, text=None):
+    """The operator has compared the read with the handwriting and says it is right (or types it right).
+
+    Only an approved card can go on the rail, so the arm is never sent a read no person has checked."""
+    if text is not None and text.strip() and text.strip() != card.get("line"):
+        card["line"] = text.strip()
+        card["corrected"] = True
+        card["read_error"] = None
+    card["checked"] = True
+    if card["status"] in ("unchecked", "unread", "unwritable"):
+        return shelve(card)
+    return store.save_card(card)   # mid-visit: it is shelved when the visit ends
+
+
 def fix_line(card, text):
     """One of us types what the card says. The quote check keeps using Reducto's own read."""
-    card["line"] = text.strip()
-    card["corrected"] = True
-    card["read_error"] = None
-    if card["status"] in ("unread", "unwritable"):
-        return shelve(card)
-    return store.save_card(card)
+    return approve(card, text)
 
 
 def shelve(card):
@@ -30,10 +44,14 @@ def shelve(card):
 
     A card whose "OK to show" box isn't ticked stays private: never on the rail, never given."""
     card.pop("cannot_write", None)
+    if TRUST_READS:
+        card["checked"] = True
     if not card.get("may_show"):
         card["status"] = "private"
     elif not card.get("line"):
         card["status"] = "unread"
+    elif not card.get("checked"):
+        card["status"] = "unchecked"   # waits for a person to compare the read with the handwriting
     elif jobs.cannot_write(card["line"]):
         # too long for the arm, or a character its pen can't draw: it would only ever be refused
         card["status"], card["cannot_write"] = "unwritable", jobs.cannot_write(card["line"])
