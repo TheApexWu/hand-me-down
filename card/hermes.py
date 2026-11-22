@@ -4,8 +4,10 @@ In this image `hermes chat` is a client of a Hermes gateway daemon, and a cold g
 takes far longer to start than a visitor will wait. So one container runs the gateway
 all day (the image's documented `gateway run` mode) and each turn attaches to it:
 
-  /opt/data  <- the Docker volume hmd-hermes-home: a Hermes home with nothing in it but the
-                "chooser" profile, which has no bundled skills and one tool. It has to be a
+  /opt/data  <- the Docker volume hmd-hermes-home: a Hermes home with nothing in it but two
+                profiles: "chooser", which has no bundled skills and one tool, and "gate"
+                (card/gate.py's safety label), which has no tools, no skills, no memory and one
+                turn. It has to be a
                 volume, not a folder on the Mac: Hermes refuses its own control socket when the
                 mount can't hold file modes ("gateway.sock has mode 0755, expected 0600").
   /work/card        <- the repo's card/ folder, read-only: the body server (give) and the quote hook
@@ -13,12 +15,12 @@ all day (the image's documented `gateway run` mode) and each turn attaches to it
                        (not the repo root: the container must never see .env, cards/ or jobs/)
 
 The model is reached through OpenRouter. The key is OPENROUTER_API_KEY from the environment
-(or the git-ignored .env). `up` copies it into the chooser profile's own .env inside the Docker
+(or the git-ignored .env). `up` copies it into each profile's own .env inside the Docker
 volume, the place Hermes reads a profile's secrets from; it never goes into the repo, and the
 default profile (which has every tool) never gets it. Change the key and run `up` again.
 
-  python -m card hermes up      start the gateway container, create the profile, write its config
-  python -m card hermes check   is give the only tool, is the hook wired
+  python -m card hermes up      start the gateway container, create both profiles, write their configs
+  python -m card hermes check   is give the chooser's only tool, is the hook wired, has the gate no tools
   python -m card hermes down    stop and remove the container; add --purge to also delete the
                                 volume, which holds the copy of the key
 """
@@ -84,6 +86,33 @@ skills:
   creation_nudge_interval: 0
 """
 
+# The gate (card/gate.py): reads one card and answers with a safety label. No tools, no skills, no
+# memory, one turn, the chooser's model. Run as: docker exec -i hmd-hermes hermes -p gate chat
+# --query-file - -Q --format stream-json --max-turns 1
+GATE = "gate"
+GATE_CONFIG = f"""# Written by `python -m card hermes up`. Edit card/hermes.py, not this file.
+_config_version: 54
+model:
+  default: "{{model}}"
+  provider: "openrouter"
+  base_url: "https://openrouter.ai/api/v1"
+agent:
+  max_turns: 1
+  reasoning_effort: "low"
+# no tools at all: it reads one card and answers with a label
+platform_toolsets:
+  cli: []
+tools:
+  tool_search:
+    enabled: "off"
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+skills:
+  creation_nudge_interval: 0
+"""
+PROFILES = {PROFILE: CONFIG, GATE: GATE_CONFIG}
+
 TURN = ["chat", "--query-file", "-", "-Q", "--format", "stream-json", "--max-turns", "4",
         "-t", "mcp-body", "--accept-hooks"]
 
@@ -136,9 +165,9 @@ def _code_mark():
     return h.hexdigest()[:12]
 
 
-def _give_profile_the_key(mark):
+def _give_profile_the_key(mark, profile_dir=PROFILE_DIR):
     """Put the key in the profile's .env. It travels on stdin, never on a command line."""
-    script = (f"cd {PROFILE_DIR} && umask 077 && "
+    script = (f"cd {profile_dir} && umask 077 && "
               "{ grep -v '^OPENROUTER_API_KEY=' .env 2>/dev/null; cat; } > .env.hmd && mv .env.hmd .env && "
               f"printf %s {mark} > .hmd-key")
     put = inside("sh", "-c", script, input=f"OPENROUTER_API_KEY={os.environ['OPENROUTER_API_KEY']}\n", flags=("-i",))
@@ -152,7 +181,7 @@ _SERVED = (
     "from hermes_cli.gateway_runtime_discovery import query_identify; "
     "p = query_identify(Path('/opt/data'), timeout=5); "
     "homes = [str(x.get('home') if isinstance(x, dict) else x) for x in (p.get('served_profiles') or [])]; "
-    f"sys.exit(0 if p.get('state') == 'ready' and '{PROFILE_DIR}' in homes else 3)"
+    f"sys.exit(0 if p.get('state') == 'ready' and all(h in homes for h in {[f'/opt/data/profiles/{n}' for n in PROFILES]!r}) else 3)"
 )
 
 
@@ -187,23 +216,29 @@ def up(log=print, wait=240):
     if not running() or mounts != MOUNTS:
         _start(log)
     restart = False
-    if inside("test", "-d", PROFILE_DIR).returncode:
-        made = docker("exec", NAME, "hermes", "profile", "create", PROFILE, "--no-skills", "--no-alias", timeout=300)
-        if inside("test", "-d", PROFILE_DIR).returncode:
-            raise RuntimeError("profile create failed: " + (made.stdout + made.stderr)[-400:])
-        log(f"created profile {PROFILE} (no bundled skills)")
-        restart = True
-    text = CONFIG.format(model=MODEL)
-    if inside("cat", f"{PROFILE_DIR}/config.yaml").stdout != text:
-        put = inside("sh", "-c", f"cat > {PROFILE_DIR}/config.yaml", input=text, flags=("-i",))
-        if put.returncode:
-            raise RuntimeError("could not write the profile config: " + put.stderr[-300:])
-        log(f"wrote the {PROFILE} profile's config.yaml (model {MODEL})")
-        restart = True
-    if inside("cat", f"{PROFILE_DIR}/.hmd-key").stdout.strip() != mark:
-        _give_profile_the_key(mark)
-        log(f"gave the {PROFILE} profile the OpenRouter key")
-        restart = True
+    for name, template in PROFILES.items():
+        pdir = f"/opt/data/profiles/{name}"
+        if inside("test", "-d", pdir).returncode:
+            made = docker("exec", NAME, "hermes", "profile", "create", name, "--no-skills", "--no-alias", timeout=300)
+            if inside("test", "-d", pdir).returncode:
+                raise RuntimeError(f"profile create failed for {name}: " + (made.stdout + made.stderr)[-400:])
+            log(f"created profile {name} (no bundled skills)")
+            restart = True
+        if name == GATE and inside("sh", "-c", f"find {pdir}/skills -name SKILL.md | head -1").stdout.strip():
+            inside("sh", "-c", f"rm -rf {pdir}/skills/* {pdir}/skills/.bundled_manifest")   # the gate gets no skills at all
+            log(f"removed every skill from the {name} profile")
+            restart = True
+        text = template.format(model=MODEL)
+        if inside("cat", f"{pdir}/config.yaml").stdout != text:
+            put = inside("sh", "-c", f"cat > {pdir}/config.yaml", input=text, flags=("-i",))
+            if put.returncode:
+                raise RuntimeError(f"could not write the {name} profile config: " + put.stderr[-300:])
+            log(f"wrote the {name} profile's config.yaml (model {MODEL})")
+            restart = True
+        if inside("cat", f"{pdir}/.hmd-key").stdout.strip() != mark:
+            _give_profile_the_key(mark, pdir)
+            log(f"gave the {name} profile the OpenRouter key")
+            restart = True
     if inside("cat", f"{PROFILE_DIR}/.hmd-code").stdout.strip() != _code_mark():
         inside("sh", "-c", f"printf %s {_code_mark()} > {PROFILE_DIR}/.hmd-code")
         log("the body server's code changed since the gateway loaded it")
@@ -215,7 +250,7 @@ def up(log=print, wait=240):
     while time.time() - started < wait:
         try:
             if running() and gateway_ready():
-                log(f"gateway is serving {PROFILE} ({time.time() - started:.0f} s)")
+                log(f"gateway is serving {', '.join(PROFILES)} ({time.time() - started:.0f} s)")
                 return
         except subprocess.TimeoutExpired:
             pass
@@ -251,4 +286,13 @@ def check(log=print):
            hooks.stdout + hooks.stderr)
     skills = inside("sh", "-c", f"find {PROFILE_DIR}/skills -name SKILL.md | sed 's|.*/skills/||; s|/SKILL.md||'").stdout.split()
     report(not any("humanizer" in s for s in skills), f"no humanizer skill in the profile (skills present: {skills or 'none'})")
+    gdir = f"/opt/data/profiles/{GATE}"
+    gate_skills = inside("sh", "-c", f"find {gdir}/skills -name SKILL.md 2>/dev/null").stdout.split()
+    report(not gate_skills, f"the gate profile has no skills ({len(gate_skills)} found)")
+    cfg = inside("cat", f"{gdir}/config.yaml").stdout
+    report("cli: []" in cfg and "max_turns: 1" in cfg and "memory_enabled: false" in cfg and "mcp_servers" not in cfg,
+           "the gate profile has no tools, no MCP servers, memory off and one turn")
+    listed = inside("hermes", "-p", GATE, "tools", "list").stdout
+    enabled = [row.split()[2] for row in listed.splitlines() if "✓ enabled" in row and len(row.split()) > 2]
+    report("disabled" in listed and not enabled, f"hermes lists no enabled tools for the gate ({enabled or 'none'})")
     return good

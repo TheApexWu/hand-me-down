@@ -154,6 +154,10 @@ def cmd_doctor(_):
         ok(bool(shutil.which(pick.HERMES_CMD.split()[0])), f"chooser command (HMD_HERMES_CMD): {pick.HERMES_CMD}")
     else:
         ok(hermes.running(), f"Hermes container {hermes.NAME} running ({hermes.IMAGE}, model {hermes.MODEL})")
+    from . import gate   # without a working gate every card is held (it fails closed)
+    label = gate.safety("I still miss the city I grew up in")
+    ok(label == "ok", f"content gate answers (Hermes profile gate): {label}")
+    ok(bool(os.environ.get("PANGRAM_API_KEY")), "PANGRAM_API_KEY in the environment (without it nothing is flagged as AI-written)")
     probe = subprocess.run([sys.executable, "-c", "import card.body_server"], capture_output=True, text=True, cwd=store.ROOT)
     ok(probe.returncode == 0, "body server imports" + ("" if probe.returncode == 0 else ": " + probe.stderr[-300:]))
     print(f"     mode: {layout['mode']}   waiting on the rail: {len(store.waiting())}")
