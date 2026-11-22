@@ -120,6 +120,9 @@ def cmd_hermes(args):
     if args.action == "up":
         hermes.up()
         hermes.check()
+        # the first turn after a restart is cold and can die before choosing: spend it here, not on a visitor
+        got = pick.warm(deadline=90)
+        print(f"warm-up turn: {got['secs']} s, " + (f"gave {got['card']} quoting {got['quote']!r}" if got["card"] else f"no gift ({got['why']})"))
     elif args.action == "check":
         sys.exit(0 if hermes.check() else 1)
     else:
