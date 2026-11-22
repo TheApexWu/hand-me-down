@@ -7,6 +7,8 @@
 
 card_no is the card whose line the arm writes (the stranger's). bbox is the line's box
 as fractions of the squared-up card image (card_img); crop is that line already cut out.
+In trace mode crop is cards/NNN_trace.png: the same cut in grey with shadows and coloured
+rules removed, because that is what the tracer needs. The screen shows the untouched cut.
 House-line jobs have no card: they are numbered from 900 and are always mode "font".
 """
 import statistics
@@ -33,16 +35,18 @@ def write(pick, visitor, layout=None):
         raise PermissionError(f"card {store.nnn(stranger['card_no'])} is not OK to show; no job is written for it")
     if stranger:
         n = stranger["card_no"]
-        mode, trace = "font", None
-        if layout["mode"] == "trace" and stranger.get("crop"):
+        mode, trace, crop = "font", None, stranger.get("crop")
+        to_trace = stranger.get("trace_img") or stranger.get("crop")
+        if layout["mode"] == "trace" and to_trace:
             # Ask the arm's own tracer, the way the arm will call it, before promising a trace.
             # A line it can't trace cleanly is written in the font instead.
             from .trace_check import traces_cleanly
-            ok, info = traces_cleanly(store.BASE / stranger["crop"])
+            ok, info = traces_cleanly(store.BASE / to_trace)
             trace = {"ok": ok, "strokes": info.get("strokes"),
                      "why": None if ok else (info.get("reason") or info.get("error") or "the tracer's gate said no")}
-            mode = "trace" if ok else "font"
-        job = {"card_no": n, "line": stranger["line"], "crop": stranger.get("crop"), "bbox": stranger.get("bbox"),
+            if ok:
+                mode, crop = "trace", to_trace   # in trace mode the arm traces `crop`: give it the cleaned cut
+        job = {"card_no": n, "line": stranger["line"], "crop": crop, "bbox": stranger.get("bbox"),
                "quote": pick["quote"], "picked_by": pick["picked_by"], "written_at": stranger["written_at"],
                "mode": mode, "trace": trace,
                "card_img": stranger.get("card_img"), "name": stranger.get("name") or None,

@@ -11,8 +11,12 @@ One line per image: ok or FAIL, strokes and millimetres of ink against the gate'
 the size the line would be written at, and the seconds the trace took. A picture of the
 strokes goes to --out. Exit code 1 if any image fails.
 
-ok only means the tracer found ink and stayed under its limits. It does not mean the strokes
-are readable: look at the picture. Needs Pillow and scikit-image 0.26+ (the tracer's imports).
+ok means the tracer found ink, stayed under its limits, and the strokes don't look like a
+shadow or a ruled line (see scribble_reason). It still does not mean the strokes are readable:
+look at the picture. Needs Pillow and scikit-image 0.26+ (the tracer's imports).
+
+  python -m card.trace_check --clean IMAGE ...   clean each image first, as the card side does
+                                                 before a job goes out (cards/NNN_trace.png)
 """
 import argparse
 import importlib
@@ -28,6 +32,32 @@ SIM = ROOT / "sim"
 OUT = Path(tempfile.gettempdir()) / "hmd_trace_check"   # pictures stay out of the repo
 HEIGHT_MM = 12.0                                         # the default of arm_tools.py plan --height
 _ADDED = []                                              # the sim folder this module put on sys.path
+
+# The tracer's gate only counts strokes and millimetres, so it passes some traces that are scribble.
+# These limits catch the ones seen so far. They come from 15 real pencil lines and 8 stand-in cards,
+# not yet from marker on the real index cards: treat them as provisional.
+MAX_INK_SHARE = 0.40    # more of the crop than this reading as ink = a shadow or dark background, not writing
+MAX_LEVEL_MM = 12.0     # one straight level stroke longer than this = a rule or an edge (longest real one: 10.6)
+MAX_BAND_SHARE = 0.17   # level strokes along one height adding up to this share of the line's width = a rule
+
+
+def scribble_reason(tracer, image_path, box, strokes, info):
+    """Why a trace that passed the tracer's gate still shouldn't be drawn, or None."""
+    import numpy as np
+    share = float(tracer.load_ink(str(image_path), tuple(box) if box else None).mean())
+    level = [(float(np.ptp(s[:, 0])), float(s[:, 1].mean())) for s in strokes
+             if np.ptp(s[:, 0]) > 1.0 and np.ptp(s[:, 1]) <= max(0.6, 0.12 * np.ptp(s[:, 0]))]
+    longest = max((w for w, _ in level), default=0.0)
+    band = max((sum(w for w, yy in level if abs(yy - y) <= 0.5) for _, y in level), default=0.0)
+    band_share = band / max(info.get("width_mm") or 1.0, 1.0)
+    info.update(ink_share=round(share, 3), longest_level_mm=round(longest, 1), band_share=round(band_share, 3))
+    if share > MAX_INK_SHARE:
+        return f"{share:.0%} of the crop reads as ink: a shadow or a dark background, not writing"
+    if longest > MAX_LEVEL_MM:
+        return f"a straight level line {longest:.0f} mm long is in the trace: a rule on the card, or an edge"
+    if band_share > MAX_BAND_SHARE:
+        return f"level strokes along one height cover {band_share:.0%} of the line: a rule on the card"
+    return None
 
 
 def load_tracer(sim_dir=None):
@@ -48,7 +78,11 @@ def load_tracer(sim_dir=None):
     loaded = sys.modules.get(name)
     if loaded is not None and Path(getattr(loaded, "__file__", None) or "").resolve().parent != sim_dir:
         del sys.modules[name]                            # same name, loaded from another folder
-    module = importlib.import_module(name)
+    keep, sys.dont_write_bytecode = sys.dont_write_bytecode, True   # leave no __pycache__ in sim/: it isn't ours
+    try:
+        module = importlib.import_module(name)
+    finally:
+        sys.dont_write_bytecode = keep
     if Path(module.__file__).resolve().parent != sim_dir:
         raise ImportError(f"{name} was found in {Path(module.__file__).parent}, not in {sim_dir}")
     return module
@@ -82,6 +116,15 @@ def traces_cleanly(image_path, box=None, sim_dir=None, preview=None):
             info["preview"] = str(preview)
         except Exception as exc:   # the picture is a nicety: the gate's answer still stands
             info["preview_error"] = f"no picture: {type(exc).__name__}: {exc}"
+    info["gate"] = bool(info.get("ok"))                 # the tracer's own verdict, kept apart from ours
+    if info["gate"]:
+        try:
+            why = scribble_reason(tracer, image_path, box, strokes, info)
+        except Exception as exc:                         # the guard must never be the thing that breaks
+            why = None
+            info["guard_error"] = f"{type(exc).__name__}: {exc}"
+        if why:
+            info.update(ok=False, reason=why)
     return bool(info.get("ok")), info
 
 
@@ -100,18 +143,23 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m card.trace_check", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("images", nargs="*", metavar="IMAGE")
-    ap.add_argument("--cards", action="store_true", help="check the crop of every card in cards/")
+    ap.add_argument("--cards", action="store_true", help="check the cut of every card in cards/ that the arm would trace")
+    ap.add_argument("--clean", action="store_true", help="clean each IMAGE first (shadows, coloured rules), as jobs do")
     ap.add_argument("--sim", metavar="DIR", help="the folder with the tracer (default: this repo's sim/)")
     ap.add_argument("--out", metavar="DIR", default=str(OUT), help=f"where the pictures go (default: {OUT})")
     a = ap.parse_args(argv)
 
     todo = [(Path(f).name, Path(f), Path(f).stem) for f in a.images]   # (label, image, picture name)
+    if a.clean:
+        from .read_card import save_trace_crop
+        Path(a.out).mkdir(parents=True, exist_ok=True)
+        todo = [(label, Path(save_trace_crop(image, Path(a.out) / f"{stem}_cleaned.png")), stem) for label, image, stem in todo]
     if a.cards:
         from . import store
         for path in sorted((store.BASE / "cards").glob("[0-9][0-9][0-9].json")):
             card = store.read_json(path) or {}
-            if card.get("crop"):
-                todo.append((path.stem, store.BASE / card["crop"], path.stem))
+            if card.get("trace_img") or card.get("crop"):
+                todo.append((path.stem, store.BASE / (card.get("trace_img") or card["crop"]), path.stem))
         if not todo:
             print(f"no card with a crop in {store.BASE / 'cards'}")
             return 0

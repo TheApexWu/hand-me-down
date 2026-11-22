@@ -2,6 +2,7 @@
 
   cards/NNN.jpg        the camera frame          cards/NNN_card.jpg  the card, squared up
   cards/NNN_line.png   the handwritten line      cards/NNN.json      what Reducto read
+  cards/NNN_trace.png  the line cleaned up for the arm's tracer (shadows and coloured rules removed)
   jobs/NNN.json        a line for the arm        done/NNN.json       the arm's reply
   cache/               Reducto reads, picks, and the run state shared with the screen
 """
@@ -90,6 +91,10 @@ def card_img_file(card_no):
 
 def line_file(card_no):
     return folder("cards") / f"{nnn(card_no)}_line.png"
+
+
+def trace_file(card_no):
+    return folder("cards") / f"{nnn(card_no)}_trace.png"
 
 
 def load_card(card_no):

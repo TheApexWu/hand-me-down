@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from . import layout as lay
 from . import store
@@ -163,6 +164,34 @@ def save_line_crop(card_img, bbox, dest, pad=0.35):
     return [round(v, 5) for v in rect]
 
 
+def clean_for_trace(bgr):
+    """The line as the arm's tracer should see it: grey, paper evened out, coloured rules dropped.
+
+    The tracer splits ink from paper with one threshold for the whole crop, so a shadow across the
+    line, or a card's red rule in dim light, comes out as pen strokes. Dividing by the paper's own
+    brightness removes the shadow; taking the brightest of blue, green and red at each pixel makes a
+    coloured rule as pale as paper while black or pencil ink stays dark.
+    """
+    def flat(grey):
+        size = min(121, max(41, int(grey.shape[0] * 0.45))) | 1          # wider than any stroke
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
+        paper = cv2.GaussianBlur(cv2.morphologyEx(grey, cv2.MORPH_CLOSE, kernel), (0, 0), 15)
+        return np.clip(grey.astype(np.float32) / np.maximum(paper, 1) * 235, 0, 255).astype(np.uint8)
+
+    dark = lambda img: float((img < 150).mean())
+    brightest, grey = flat(bgr.max(axis=2)), flat(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY))
+    # Writing in coloured ink would vanish along with the rules: if most of the ink went, keep plain grey.
+    return brightest if dark(brightest) >= 0.5 * dark(grey) else grey
+
+
+def save_trace_crop(line_png, dest):
+    img = cv2.imread(str(line_png))
+    if img is None:
+        return None
+    cv2.imwrite(str(dest), clean_for_trace(img))
+    return dest
+
+
 def read(card, layout=None, call=None):
     """Read a card's image and fill in its record: line, bbox, name, tick, crop."""
     layout = layout or lay.load()
@@ -180,6 +209,8 @@ def read(card, layout=None, call=None):
     card["may_show"] = lay.may_show(card["ok_to_show"], layout)  # decided once, here, from the paper
     card["crop_rect"] = save_line_crop(img_path, card.get("bbox"), store.line_file(card["card_no"]))
     card["crop"] = store.rel(store.line_file(card["card_no"]))
+    trace = save_trace_crop(store.line_file(card["card_no"]), store.trace_file(card["card_no"]))
+    card["trace_img"] = store.rel(trace) if trace else None   # what the arm traces; the screen shows crop
     return store.save_card(card)
 
 

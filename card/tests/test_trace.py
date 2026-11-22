@@ -59,3 +59,61 @@ def test_font_mode_never_runs_the_tracer(tmp_path):
 def test_a_missing_tracer_means_font_not_a_crash(tmp_path):
     ok, info = traces_cleanly(photo(tmp_path, "x", a_short_line), sim_dir=tmp_path / "no-sim-here")
     assert ok is False and "not importable" in info["error"]
+
+
+# --- what the tracer's own gate lets through: shadows and ruled lines -------------------------------
+
+def line_crop(tmp_path, name, ink=(25, 25, 25), red_rule=False, black_rule=False, shadow=None):
+    """A cut-out line of 'handwriting' as the camera might see it."""
+    img = np.full((170, 1100, 3), 236, np.uint8)
+    if red_rule:
+        cv2.line(img, (0, 46), (1100, 52), (95, 95, 225), 3)             # an index card's red header rule
+    if black_rule:
+        cv2.line(img, (0, 150), (1100, 150), (30, 30, 30), 3)            # a pencil line, or the table's edge
+    cv2.putText(img, "keeps the porch light on", (60, 115), cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, 1.9, ink, 3, cv2.LINE_AA)
+    if shadow:
+        img[:, 550:] = (img[:, 550:] * shadow).astype(np.uint8)          # a hard shadow over the right half
+    path = tmp_path / f"{name}.png"
+    cv2.imwrite(str(path), img)
+    return path
+
+
+def cleaned(tmp_path, path):
+    from card.read_card import save_trace_crop
+    return save_trace_crop(path, tmp_path / f"{path.stem}_trace.png")
+
+
+def test_a_deep_shadow_is_not_passed_off_as_writing(tmp_path):
+    raw = line_crop(tmp_path, "shadow", shadow=0.5)
+    ok, info = traces_cleanly(raw)
+    assert ok is False and "shadow" in info["reason"] and info["ink_share"] > 0.4
+    ok, info = traces_cleanly(cleaned(tmp_path, raw))                     # the cleaned cut traces like a clean line
+    assert ok and info["ink_share"] < 0.2
+    plain = traces_cleanly(cleaned(tmp_path, line_crop(tmp_path, "plain")))[1]
+    assert abs(info["strokes"] - plain["strokes"]) <= 6
+
+
+def test_a_coloured_rule_in_dim_light_is_cleaned_away(tmp_path):
+    raw = line_crop(tmp_path, "red", red_rule=True, shadow=0.8)
+    ok, info = traces_cleanly(cleaned(tmp_path, raw))
+    assert ok and info["longest_level_mm"] < 6 and info["band_share"] < 0.1
+
+
+def test_a_black_line_through_the_crop_falls_back_to_the_font(tmp_path):
+    raw = line_crop(tmp_path, "edge", black_rule=True)
+    ok, info = traces_cleanly(cleaned(tmp_path, raw))                     # cleaning can't remove a line with no colour
+    assert ok is False and info["gate"] is True and "line" in info["reason"]
+
+
+def test_coloured_ink_survives_the_cleaning(tmp_path):
+    raw = line_crop(tmp_path, "blue", ink=(190, 70, 40))                  # written in blue pen
+    ok, info = traces_cleanly(cleaned(tmp_path, raw))
+    assert ok and info["strokes"] > 10
+
+
+def test_in_trace_mode_the_arm_is_given_the_cleaned_cut(tmp_path):
+    job = give_one(tmp_path, a_short_line, "the light")
+    assert job["mode"] == "trace" and job["crop"].endswith("_trace.png")
+    assert cv2.imread(str(store.BASE / job["crop"]), cv2.IMREAD_UNCHANGED).ndim == 2      # grey, for the tracer
+    card = store.load_card(job["card_no"])
+    assert card["crop"].endswith("_line.png") and card["trace_img"] == job["crop"]         # the screen keeps the natural cut
