@@ -238,20 +238,27 @@ class App:
 
     def next_card(self, file=None):
         self.reset()
-        self.demo(file=file)
+        try:
+            self.demo(file=file)
+        except Exception as exc:     # on the public screen a failed read has to say so, not just go quiet
+            self.error = f"{type(exc).__name__}: {exc}"
+            traceback.print_exc()
+            store.set_state(stage="idle", notice="unread")
 
     def demo(self, file=None):
         """One press with the team's own card: read it, show it, let the chooser answer, send the job.
         A held card still stops here, and this card stays off the rail until a person checks it."""
         self.capture(file=file, show=True)
         if store.state().get("stage") != "confirm":
+            if store.state().get("stage") == "idle" and self.error:     # held by the gate: the operator page has why
+                store.set_state(stage="idle", notice="person")
             return
         card = store.load_card(self.visitor)
         if not (card and (card.get("line") or "").strip()):    # no reply goes out for a card nobody could read
             if card:
                 visit.discard(card)
             self.visitor, self.error = None, "Couldn't read that card: lay it flat under the camera and press again"
-            store.set_state(stage="idle", unread=True)
+            store.set_state(stage="idle", notice="unread")
             return
         time.sleep(DEMO_HOLD_S)
         mine = self.visitor
@@ -397,6 +404,11 @@ class App:
 
     def arm_refused(self, reason, st):
         """The arm would not write this job. Never shown as delivered; the card comes off the rail."""
+        if reason == jobs.NOT_CLEAR:     # nothing is wrong with the reply card: the box just wasn't ready
+            self.reset()
+            store.set_state(stage="idle", notice="blank")
+            self.record_stop()
+            return
         card = None if self.job.get("house") else store.load_card(self.job["card_no"])
         if card:
             card.update(status="unwritable", cannot_write=f"the arm refused it: {reason}")
@@ -690,7 +702,7 @@ def make_handler(app):
                 file = arg("file")
                 ok = app.start(lambda: app.capture(seed=seed, file=file))
             elif path == "/api/next":
-                if store.state().get("stage", "idle") not in ("idle", "card", "delivered"):
+                if store.state().get("stage", "idle") not in ("idle", "card", "delivered", "held"):
                     return self.send({"ok": False, "error": "a card is still in progress"}, code=409)
                 file = arg("file")
                 ok = app.start(lambda: app.next_card(file=file))
