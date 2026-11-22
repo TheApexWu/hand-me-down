@@ -1,0 +1,261 @@
+{
+ "date": "2026-11-22",
+ "branch": "carson/card-side",
+ "hermes": {
+  "image": "nousresearch/hermes-agent:v0.23.3",
+  "model": "deepseek/deepseek-v4.1-flash-1017 (OpenRouter)",
+  "profiles": {
+   "chooser": "one tool (give), quote hook fail_closed, max_turns 4",
+   "gate": "no tools, no skills, memory off, max_turns 1"
+  }
+ },
+ "runs": [
+  {
+   "run": "gate-loop",
+   "about": "five sample cards (Alex's lorem-ipsum set) seeded through the live gate, then five visits: real Hermes chooser, fake arm",
+   "gate_checks": [
+    {
+     "card_no": 1,
+     "line": "Lorem Ipsum dolor sit amet",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    },
+    {
+     "card_no": 2,
+     "line": "Ut ehlm ad minlm Vehram quis",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    },
+    {
+     "card_no": 3,
+     "line": "Pretium ex saplen Vitae pellentsque",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    },
+    {
+     "card_no": 4,
+     "line": "Ad litora torquent per conubia nostra",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    },
+    {
+     "card_no": 5,
+     "line": "The Quick brown fox jumped over",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    },
+    {
+     "card_no": 6,
+     "line": "Pretium ex saplen Vitae pellentsque",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    },
+    {
+     "card_no": 7,
+     "line": "Ad litora torquent per conubia nostra",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    },
+    {
+     "card_no": 8,
+     "line": "The Quick brown fox jumped over",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    },
+    {
+     "card_no": 9,
+     "line": "Lorem Ipsum dolor sit amet",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    },
+    {
+     "card_no": 10,
+     "line": "Ut ehlm ad minlm Vehram quis",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    }
+   ],
+   "visits": [
+    {
+     "job": 1,
+     "visitor_card": 9,
+     "provenance": "visitor",
+     "bank_id": null,
+     "source": null,
+     "stranger_line": "Lorem Ipsum dolor sit amet",
+     "quote": "dolor sit amet",
+     "chars": 14,
+     "words": 3,
+     "quote_on_card": true,
+     "picked_by": "hermes",
+     "pick_secs": 1.9,
+     "misses": 0,
+     "done": {
+      "delivered_at": "15:00",
+      "duration_s": 3
+     }
+    },
+    {
+     "job": 2,
+     "visitor_card": 10,
+     "provenance": "visitor",
+     "bank_id": null,
+     "source": null,
+     "stranger_line": "Ut ehlm ad minlm Vehram quis",
+     "quote": "Ut ehlm ad",
+     "chars": 10,
+     "words": 3,
+     "quote_on_card": true,
+     "picked_by": "hermes",
+     "pick_secs": 2.6,
+     "misses": 0,
+     "done": {
+      "delivered_at": "15:01",
+      "duration_s": 3
+     }
+    },
+    {
+     "job": 3,
+     "visitor_card": 6,
+     "provenance": "visitor",
+     "bank_id": null,
+     "source": null,
+     "stranger_line": "Pretium ex saplen Vitae pellentsque",
+     "quote": "Pretium ex",
+     "chars": 10,
+     "words": 2,
+     "quote_on_card": true,
+     "picked_by": "hermes",
+     "pick_secs": 2.6,
+     "misses": 0,
+     "done": {
+      "delivered_at": "15:00",
+      "duration_s": 3
+     }
+    },
+    {
+     "job": 4,
+     "visitor_card": 7,
+     "provenance": "visitor",
+     "bank_id": null,
+     "source": null,
+     "stranger_line": "Ad litora torquent per conubia nostra",
+     "quote": "Ad litora",
+     "chars": 9,
+     "words": 2,
+     "quote_on_card": true,
+     "picked_by": "hermes",
+     "pick_secs": 2.6,
+     "misses": 0,
+     "done": {
+      "delivered_at": "15:00",
+      "duration_s": 3
+     }
+    },
+    {
+     "job": 5,
+     "visitor_card": 8,
+     "provenance": "visitor",
+     "bank_id": null,
+     "source": null,
+     "stranger_line": "The Quick brown fox jumped over",
+     "quote": "jumped over",
+     "chars": 11,
+     "words": 2,
+     "quote_on_card": true,
+     "picked_by": "hermes",
+     "pick_secs": 2.6,
+     "misses": 0,
+     "done": {
+      "delivered_at": "15:00",
+      "duration_s": 3
+     }
+    }
+   ]
+  },
+  {
+   "run": "archive-demo",
+   "about": "only two archive lines waiting (bank top-up), one visit: real Hermes chooser, fake arm, screen captured in headless Chrome",
+   "gate_checks": [
+    {
+     "card_no": 700,
+     "line": "I am so sorry! I hope you are okay!",
+     "provenance": "archive",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": null
+    },
+    {
+     "card_no": 701,
+     "line": "Keep pushing. You'll come out of this stronger I promise",
+     "provenance": "archive",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": null
+    },
+    {
+     "card_no": 702,
+     "line": "Lorem Ipsum dolor sit amet",
+     "provenance": "visitor",
+     "safety": "ok",
+     "held": false,
+     "reasons": [],
+     "pangram": "left out of the live decision"
+    }
+   ],
+   "visits": [
+    {
+     "job": 700,
+     "visitor_card": 702,
+     "provenance": "archive",
+     "bank_id": "h08",
+     "source": "GoEmotions (Google Research, Reddit comments 2005-2019, Apache-2.0)",
+     "stranger_line": "I am so sorry! I hope you are okay!",
+     "quote": "so sorry!",
+     "chars": 9,
+     "words": 2,
+     "quote_on_card": true,
+     "picked_by": "hermes",
+     "pick_secs": 3.3,
+     "misses": 0,
+     "done": {
+      "delivered_at": "14:57",
+      "duration_s": 16
+     }
+    }
+   ]
+  }
+ ]
+}
