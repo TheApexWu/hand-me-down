@@ -30,7 +30,7 @@ from . import layout as lay
 from .quote import words as norm_words
 
 CAM_STALE_S, CAM_MAX_BYTES = 3.0, 400_000
-DEMO_HOLD_S = 3.0   # how long the demo button leaves the read card on screen before the chooser answers
+DEMO_HOLD_S = 2.0   # how long the demo button leaves the read card on screen before the chooser answers
 
 WEB = Path(__file__).parent / "web"
 SCREEN = store.ROOT / "screen" / "index.html"
@@ -212,6 +212,7 @@ class App:
             store.set_state(stage="idle")
             return
         if seed:
+            card["reply_card"] = True      # the Next card button puts it back on the rail after each run
             visit.shelve(card)
             store.set_state(stage="idle")
             return
@@ -222,6 +223,22 @@ class App:
             store.set_state(stage="confirm", words=len(card.get("words") or []), read_secs=card.get("read_secs"), **mine)
         else:  # not OK to show: nothing of this card goes on the screen, so there is nothing to confirm
             self.choose(card)
+
+    def reset(self):
+        """Ready for the next person: an unwritten job is taken back and the reply cards return to the rail."""
+        if self.job:
+            visit.ungive(self.job)
+        self.visitor, self.job = None, None
+        for c in store.all_cards():
+            if (c.get("reply_card") or bank.is_archive(c)) and c.get("status") == "given":
+                c["status"] = "waiting"
+                c.pop("given_to", None)
+                store.save_card(c)
+        store.set_state(stage="idle")
+
+    def next_card(self, file=None):
+        self.reset()
+        self.demo(file=file)
 
     def demo(self, file=None):
         """One press with the team's own card: read it, show it, let the chooser answer, send the job.
@@ -665,6 +682,11 @@ def make_handler(app):
                 seed = str(arg("seed")) in ("1", "true", "True")
                 file = arg("file")
                 ok = app.start(lambda: app.capture(seed=seed, file=file))
+            elif path == "/api/next":
+                if store.state().get("stage", "idle") not in ("idle", "card", "delivered"):
+                    return self.send({"ok": False, "error": "a card is still in progress"}, code=409)
+                file = arg("file")
+                ok = app.start(lambda: app.next_card(file=file))
             elif path == "/api/demo":
                 file = arg("file")
                 ok = app.start(lambda: app.demo(file=file))

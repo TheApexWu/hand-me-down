@@ -149,6 +149,9 @@
   body:not(.stage-idle):not(.stage-card) #invite { opacity: 0; }
 
   /* ---------- the machine ---------- */
+  #next { position: absolute; left: 3vw; bottom: 4vh; z-index: 60; padding: 1.5vh 2.6vh; border: 0; border-radius: .4vh; background: var(--ink); color: #fffdf8; font: 600 1.6vh var(--mono); letter-spacing: .16em; cursor: pointer; }
+  #next:disabled { opacity: .45; cursor: default; }
+  body:not(.stage-idle):not(.stage-card):not(.stage-delivered) #next { display: none; }
   #machine { position: absolute; right: 3vw; top: 11vh; width: 33vw; height: 80vh; }
   #machine .frame { position: absolute; inset: 0; border: .12vh solid var(--faint); }
   #machine .frame::before, #machine .frame::after { content: ""; position: absolute; width: 2.2vh; height: 2.2vh; border: .3vh solid var(--ink); }
@@ -221,6 +224,7 @@
   <div id="tele"></div>
 </aside>
 
+<button id="next" type="button"></button>
 <div id="flash"></div>
 <div id="sim"><video id="sim-video" muted playsinline loop preload="none"></video>
   <div class="label">SIMULATION</div><div class="label foot">SIMULATION</div></div>
@@ -238,7 +242,7 @@
     house: 'FROM THE HOUSE',
     archive: 'ARCHIVE', archive_line: src => `FROM THE ARCHIVE${src ? `  <b>${src}</b>` : ''}`, archived: n => `${n} ARCHIVE`,
     pen: 'PEN', delivered_at: (t, d) => `DELIVERED <b>${t}</b>  TOOK <b>${d}</b>`, returned: 'RETURNED TO THE STACK',
-    camera: 'LIVE CAMERA', phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
+    next: 'NEXT CARD', camera: 'LIVE CAMERA', phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
   };
 
   const $ = id => document.getElementById(id);
@@ -570,6 +574,16 @@
     next.onerror = () => { setCam(false); setTimeout(camera, 1500); };
     next.src = '/cam.jpg?t=' + Date.now();
   }
+  /* one press for the next person; the server only takes it from this machine */
+  const next = $('next');
+  if (['127.0.0.1', 'localhost'].includes(location.hostname)) {
+    next.textContent = LABELS.next;
+    next.onclick = async () => {
+      next.disabled = true;
+      try { await fetch('/api/next', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}); } catch (e) {}
+      setTimeout(() => { next.disabled = false; }, 2500);
+    };
+  } else next.remove();
   loadStack(); tick(); pose(); camera(); requestAnimationFrame(frame);
   setInterval(loadStack, 20000);
 </script>
