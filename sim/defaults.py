@@ -62,6 +62,10 @@ def check():
 
 
 def apply():
+    STATE.mkdir(exist_ok=True)
+    poses = load(STATE / "poses.json")
+    poses["l"] = {"reached_deg": D["home_deg"]}
+    put(STATE / "poses.json", poses)
     put(STATE / "joint_offsets.json", D["joint_offsets_deg"])
     ink = load(STATE / "ink_contact.json")
     ink.update(first_ink_z_mm=D["pen"]["first_ink_z_mm"], best_line_z_mm=D["pen"]["write_z_mm"], press_mm=D["pen"]["press_mm"])
