@@ -4,6 +4,7 @@ import sys
 import time
 
 from card import fake_arm, pick, server, store
+from card.tests.conftest import reducto_says
 
 FAKE = f"{sys.executable} -c \"import sys,json; from card.body_server import give; [print(give(c,q)) for c,q in json.loads(sys.argv[1])]\" "
 
@@ -72,11 +73,19 @@ def test_a_job_can_be_withdrawn_before_the_arm_does_it(site):
     assert fake_arm.run_once(store.BASE, seconds=0, log=lambda *_: None) == []   # nothing for the arm to write
 
 
-def test_the_screen_shows_the_visitors_card_only_with_the_demo_switch(card_photo, site, monkeypatch):
+def test_the_demo_button_goes_from_card_to_job_and_shows_the_read(card_photo, site, monkeypatch):
+    monkeypatch.setattr(server, "DEMO_HOLD_S", 0.5)
+    site.capture(card_photo("a", "keeps the porch light on"), "keeps the porch light on", seed=True)
+    site.capture(card_photo("b", "never learned to swim"), "never learned to swim", seed=True)
+    monkeypatch.setattr(pick, "HERMES_CMD", FAKE + "'" + json.dumps([["001", "the porch light"]]) + "'")
+    site.app.reducto_call = reducto_says("I feel lost and left behind")
+    assert site.call("/api/demo", body={"file": str(card_photo("v", "v"))})[0] == 200
+    assert wait_for("confirm", site)["mine_line"] == "I feel lost and left behind"
+    writing = wait_for("writing", site)
+    assert writing["by"] == "hermes" and writing["quote"] == "the porch light" and "mine" not in writing
+    assert all(c["line"] != "I feel lost and left behind" for c in store.waiting())      # not on the rail unchecked
+
+
+def test_a_plain_visit_never_shows_the_read_on_the_public_screen(card_photo, site):
     site.capture(card_photo("a", "x"), "I feel lost")
     assert not any(k.startswith("mine") for k in wait_for("confirm", site))
-    assert site.call("/api/confirm", body={"yes": False})[0] == 200
-    wait_for("idle", site)
-    monkeypatch.setattr(server, "SHOW_VISITOR", True)
-    site.capture(card_photo("b", "y"), "I feel lost")
-    assert wait_for("confirm", site)["mine_line"] == "I feel lost"

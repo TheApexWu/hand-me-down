@@ -33,6 +33,7 @@
       <h2>Card eye <span id="cam" class="dim"></span><a href="/layout">layout tool</a><a href="/" target="_blank">visitor screen</a></h2>
       <div class="view"><img id="preview" alt=""><svg id="overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg></div>
       <div class="row" style="margin-top:10px">
+        <button class="main" id="b-demo">Demo run<kbd>d</kbd></button>
         <button class="main" id="b-visit">Visit<kbd>space</kbd></button>
         <button id="b-yes">Read is right: go<kbd>y</kbd></button>
         <button id="b-no">Retake<kbd>n</kbd></button>
@@ -134,6 +135,7 @@
     $('job').hidden = !j; if (j) $('job').textContent = JSON.stringify(Object.fromEntries(['card_no', 'line', 'crop', 'bbox', 'quote', 'picked_by', 'written_at', 'mode'].map(k => [k, j[k]])));
   }
 
+  $('b-demo').onclick = () => post('/api/demo');
   $('b-visit').onclick = () => post('/api/capture');
   $('b-seed').onclick = () => post('/api/capture', {seed: true});
   $('b-yes').onclick = () => post('/api/confirm', {yes: true, approve: true, text: $('fix').value.trim() || undefined}).then(() => $('fix').value = '');
@@ -157,7 +159,7 @@
   document.addEventListener('keydown', e => {
     if (e.target.dataset?.check !== undefined && e.key === 'Enter') { e.target.blur(); post('/api/approve', {card: e.target.dataset.check, text: e.target.value}); return; }
     if (e.target.tagName === 'INPUT' || e.metaKey || e.ctrlKey) return;
-    const b = {' ': 'b-visit', s: 'b-seed', y: 'b-yes', n: 'b-no', a: 'b-another', c: 'b-clear', r: 'b-rec', m: 'b-sim', w: 'b-withdraw'}[e.key];
+    const b = {d: 'b-demo', ' ': 'b-visit', s: 'b-seed', y: 'b-yes', n: 'b-no', a: 'b-another', c: 'b-clear', r: 'b-rec', m: 'b-sim', w: 'b-withdraw'}[e.key];
     if (b) { e.preventDefault(); if (!$(b).disabled) $(b).click(); }
   });
   setInterval(refresh, 700); refresh();
