@@ -1,3 +1,9 @@
+import json
+import threading
+import urllib.error
+import urllib.request
+from http.server import ThreadingHTTPServer
+
 import cv2
 import numpy as np
 import pytest
@@ -67,3 +73,51 @@ def reducto_says(*texts):
             raise ConnectionError("reducto is down")
         return response(text)
     return call
+
+
+class Site:
+    """The real HTTP server on a free local port, with a stand-in for Reducto."""
+
+    def __init__(self):
+        from card import server
+        self.app = server.App(use_camera=False)
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(self.app))
+        self.base = f"http://127.0.0.1:{self.httpd.server_address[1]}"
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        threading.Thread(target=self.app.watch_done, daemon=True).start()
+
+    def call(self, path, body=None, token=None, cookie=None):
+        """(status, body bytes, headers) for a GET, or a POST when body is given."""
+        headers = {"Content-Type": "application/json"} if body is not None else {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        if cookie:
+            headers["Cookie"] = cookie
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(self.base + path, data=data, headers=headers, method="POST" if data is not None else "GET")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                return r.status, r.read(), dict(r.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, e.read(), dict(e.headers)
+
+    def get(self, path, **kw):
+        return self.call(path, **kw)[:2]
+
+    def capture(self, photo, text, seed=False):
+        self.app.reducto_call = reducto_says(text)
+        self.app.capture(seed=seed, file=str(photo))
+        return store.load_card(store.next_no() - 1)
+
+    def close(self):
+        self.app.stop.set()
+        self.httpd.shutdown()
+
+
+@pytest.fixture
+def site(monkeypatch):
+    from card import pick
+    monkeypatch.setattr(pick, "online", lambda host=None: True)
+    s = Site()
+    yield s
+    s.close()

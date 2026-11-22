@@ -5,9 +5,14 @@
   /layout   click the card's corners and the line box, save card/layout.json
 
 With --lan, other machines can read the screen, cards/, jobs/ and done/, and the arm
-laptop can POST its reply to /done/NNN.json. Everything else answers this machine only.
+laptop can POST its reply to /done/NNN.json, but only with the shared token: every route
+refuses a request from another machine that doesn't carry it. The operator page, the layout
+tool and everything that changes state answer this machine only, token or not.
 """
+import hmac
 import json
+import os
+import secrets
 import threading
 import time
 import traceback
@@ -55,7 +60,22 @@ def quote_marks(quote, stranger, visitor):
     return marks
 
 
+def lan_token():
+    """The shared secret other machines must send. HMD_TOKEN if set, else one made once and kept
+    in cache/lan_token (git-ignored, and outside what the Hermes container can see)."""
+    if os.environ.get("HMD_TOKEN"):
+        return os.environ["HMD_TOKEN"]
+    path = store.folder("cache") / "lan_token"
+    if not path.exists():
+        path.write_text(secrets.token_urlsafe(18))
+        path.chmod(0o600)
+    return path.read_text().strip()
+
+
 class App:
+    token = None           # set by --lan: a request from another machine must carry it
+    trust_loopback = True  # tests turn this off to play the part of another machine
+
     def __init__(self, camera_spec=None, use_camera=True, image=None, reducto_call=None):
         self.camera, self.camera_spec, self.use_camera = None, camera_spec, use_camera
         self.reducto_call = reducto_call  # tests pass a stand-in; None means the real Reducto
@@ -65,6 +85,7 @@ class App:
         self.error = None
         self.visitor, self.job = None, None
         self.recorder = None
+        self.stop = threading.Event()
 
     def cam(self):
         if self.camera is None and self.use_camera and not self.image:
@@ -170,8 +191,7 @@ class App:
 
     def watch_done(self):
         """Fill the postmark when the arm's reply lands in done/."""
-        while True:
-            time.sleep(0.5)
+        while not self.stop.wait(0.5):
             st = store.state()
             if st.get("stage") != "writing" or not self.job:
                 if self.recorder and self.recorder.auto and time.time() > self.recorder.until:
@@ -231,7 +251,24 @@ def make_handler(app):
             pass
 
         def local(self):
-            return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+            return app.trust_loopback and self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+        def allowed(self):
+            """This machine, or another machine carrying the shared token (header, cookie or ?token=)."""
+            self.fresh_cookie = False
+            if self.local():
+                return True
+            if not app.token:
+                return False
+            query = parse_qs(urlparse(self.path).query)
+            cookies = dict(c.strip().split("=", 1) for c in (self.headers.get("Cookie") or "").split(";") if "=" in c)
+            auth = self.headers.get("Authorization") or ""
+            sent = [auth[7:] if auth.startswith("Bearer ") else "", self.headers.get("X-HMD-Token") or "",
+                    cookies.get("hmd_token", ""), (query.get("token") or [""])[0]]
+            ok = any(x and hmac.compare_digest(x.encode(), app.token.encode()) for x in sent)
+            # a browser on a second display opens /?token=... once; the cookie carries it from then on
+            self.fresh_cookie = ok and bool((query.get("token") or [""])[0])
+            return ok
 
         def send(self, body, ctype="application/json", code=200):
             if isinstance(body, (dict, list)):
@@ -242,6 +279,8 @@ def make_handler(app):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            if getattr(self, "fresh_cookie", False):
+                self.send_header("Set-Cookie", f"hmd_token={app.token}; Path=/; HttpOnly; SameSite=Strict")
             self.end_headers()
             self.wfile.write(body)
 
@@ -261,6 +300,8 @@ def make_handler(app):
             self.send(cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])[1].tobytes(), "image/jpeg")
 
         def do_GET(self):
+            if not self.allowed():
+                return self.send({"error": "token required"}, code=401)
             url = urlparse(self.path)
             path, name, query = url.path, Path(url.path).name, parse_qs(url.query)
             if path == "/":
@@ -299,6 +340,8 @@ def make_handler(app):
             self.send({"error": "not found"}, code=404)
 
         def do_POST(self):
+            if not self.allowed():
+                return self.send({"error": "token required"}, code=401)
             url = urlparse(self.path)
             path, query = url.path, parse_qs(url.query)
             length = int(self.headers.get("Content-Length") or 0)
@@ -358,16 +401,34 @@ def make_handler(app):
     return Handler
 
 
+def my_ip():
+    """This machine's address on the local network (no packet is sent)."""
+    import socket
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("10.255.255.255", 1))
+        return probe.getsockname()[0]
+    except OSError:
+        return "THIS-LAPTOP-IP"
+    finally:
+        probe.close()
+
+
 def serve(port=8040, lan=False, camera_spec=None, use_camera=True, image=None, open_page=None):
     app = App(camera_spec, use_camera, image)
     store.set_state(stage="idle")
+    if lan:
+        app.token = lan_token()
     httpd = ThreadingHTTPServer(("0.0.0.0" if lan else "127.0.0.1", port), make_handler(app))
     httpd.daemon_threads = True
     print(f"screen    http://localhost:{port}/")
     print(f"operator  http://localhost:{port}/op")
     print(f"layout    http://localhost:{port}/layout")
     if lan:
-        print("LAN on: other machines can read the screen, cards/, jobs/, done/ and POST /done/NNN.json")
+        ip = my_ip()
+        print("LAN on. Other machines need the token on every request:")
+        print(f"  arm laptop      python card/arm_sync.py --host {ip} --port {port} --token {app.token}")
+        print(f"  second display  http://{ip}:{port}/?token={app.token}")
     threading.Thread(target=app.cam, daemon=True).start()  # warm the camera
     threading.Thread(target=app.watch_done, daemon=True).start()
     if open_page:
@@ -378,6 +439,7 @@ def serve(port=8040, lan=False, camera_spec=None, use_camera=True, image=None, o
     except KeyboardInterrupt:
         pass
     finally:
+        app.stop.set()
         app.record_stop()
         if app.camera:
             app.camera.close()

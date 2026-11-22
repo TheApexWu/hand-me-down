@@ -1,15 +1,11 @@
 """'OK to show': an unticked card must not go on the rail, be picked, be written or appear on a screen."""
 import json
 import sys
-import threading
 import time
-import urllib.error
-import urllib.request
-from http.server import ThreadingHTTPServer
 
 import pytest
 
-from card import jobs, pick, server, store, visit
+from card import jobs, pick, store, visit
 from card.tests.conftest import CORNERS, TICK, reducto_says, set_layout
 
 SECRET, OPEN = "the line nobody may see", "keeps the porch light on"
@@ -76,33 +72,8 @@ def test_require_tick_off_is_the_only_way_to_show_cards_without_a_box(card_photo
     assert seed(card_photo, OPEN, ticked=False)["status"] == "waiting"
 
 
-@pytest.fixture
-def site(monkeypatch):
-    """The real HTTP server on a free local port, with stand-ins for Reducto and Hermes."""
-    monkeypatch.setattr(pick, "online", lambda host=None: True)
-    app = server.App(use_camera=False)
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(app))
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    base = f"http://127.0.0.1:{httpd.server_address[1]}"
-
-    def get(path):
-        try:
-            with urllib.request.urlopen(base + path, timeout=5) as r:
-                return r.status, r.read()
-        except urllib.error.HTTPError as e:
-            return e.code, e.read()
-
-    def capture(photo, text, seed=False):
-        app.reducto_call = reducto_says(text)
-        app.capture(seed=seed, file=str(photo))
-        return store.load_card(store.next_no() - 1)
-
-    yield app, get, capture
-    httpd.shutdown()
-
-
 def test_an_unticked_cards_pictures_are_never_served(card_photo, site):
-    app, get, capture = site
+    get, capture = site.get, site.capture
     shown = capture(card_photo("a", OPEN, ticked=True), OPEN, seed=True)
     private = capture(card_photo("b", SECRET, ticked=False), SECRET, seed=True)
     assert get(f"/cards/{store.nnn(shown['card_no'])}_line.png")[0] == 200
@@ -114,7 +85,7 @@ def test_an_unticked_cards_pictures_are_never_served(card_photo, site):
 
 
 def test_an_unticked_visitor_gets_a_gift_but_never_appears_on_the_screen(card_photo, site, monkeypatch):
-    app, get, capture = site
+    app, get, capture = site.app, site.get, site.capture
     shown = capture(card_photo("a", OPEN, ticked=True), OPEN, seed=True)
     capture(card_photo("b", "left the door unlocked for you", ticked=True), "left the door unlocked for you", seed=True)
     monkeypatch.setattr(pick, "HERMES_CMD", FAKE + "'" + json.dumps([[store.nnn(shown["card_no"]), "the porch light"]]) + "'")
