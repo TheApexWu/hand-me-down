@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hand-Me-Down</title>
+<style>
+  /* The visitor screen. An engineer's notebook on a writing desk: on the left the cards, on the right
+     the machine. Handwriting is the visitors' own; every label is in LABELS (bottom of the page), set
+     by plain code from measurements, never written by a model. Stages (card/server.py): idle, reading,
+     confirm, choosing, card, writing, held, delivered. */
+  :root {
+    --paper: #f2ece0; --ink: #1d1b18; --soft: rgba(29, 27, 24, .58); --faint: rgba(29, 27, 24, .16);
+    --mark: #c2402d; --pencil: #3a6db3; --card: #fcfaf4;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --type: "American Typewriter", "Courier Prime", "Courier New", serif;
+  }
+  html, body { height: 100%; margin: 0; overflow: hidden; background: var(--paper); color: var(--ink); }
+  body {
+    cursor: none; font-family: var(--mono);
+    background:
+      radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(80, 55, 30, .13) 100%),
+      radial-gradient(circle, rgba(29, 27, 24, .085) .09vh, transparent .1vh) 0 0 / 2.6vh 2.6vh,
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .33 0 0 0 0 .26 0 0 0 0 .18 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      var(--paper);
+  }
+
+  /* ---------- top bar: the name, the four steps, the counters and the clock ---------- */
+  #top { position: absolute; left: 3vw; right: 3vw; top: 0; height: 8vh; display: flex; align-items: center; justify-content: space-between;
+         border-bottom: .12vh solid var(--faint); font-size: 1.45vh; letter-spacing: .18em; }
+  .brand { display: flex; align-items: center; gap: 1.2vh; font-weight: 700; }
+  .brand i { width: 2.6vh; height: 2.6vh; border: .22vh solid var(--mark); border-radius: 50%; position: relative; }
+  .brand i::after { content: ""; position: absolute; inset: .45vh; border: .12vh solid var(--mark); border-radius: 50%; }
+  #steps { display: flex; gap: 3.2vh; list-style: none; margin: 0; padding: 0; color: var(--soft); }
+  #steps li { display: flex; align-items: center; gap: .9vh; transition: color .5s; }
+  #steps li::before { content: ""; width: .9vh; height: .9vh; border-radius: 50%; border: .15vh solid currentColor; transition: background .5s; }
+  #steps li.done { color: var(--ink); } #steps li.done::before { background: var(--ink); }
+  #steps li.now { color: var(--mark); } #steps li.now::before { background: var(--mark); animation: beat 1.4s ease-in-out infinite; }
+  #steps li + li { padding-left: 3.2vh; border-left: .12vh solid var(--faint); }
+  @keyframes beat { 0%, 100% { transform: scale(1) } 50% { transform: scale(1.5) } }
+  .meta { display: flex; gap: 2.6vh; color: var(--soft); }
+  #clock { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* ---------- the desk ---------- */
+  #desk { position: absolute; left: 3vw; top: 9vh; width: 57vw; height: 84vh; }
+  .card {
+    position: absolute; aspect-ratio: 127 / 76; border-radius: .5vh; left: 0; top: 0;
+    background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 127 76' preserveAspectRatio='none'%3E%3Cg fill='none' stroke-width='.2'%3E%3Cpath d='M0 12.4H127M0 13.3H127' stroke='%23c2402d' stroke-opacity='.55'/%3E%3Cpath d='M0 19.8H127M0 26.2H127M0 32.6H127M0 39H127M0 45.4H127M0 51.8H127M0 58.2H127M0 64.6H127M0 71H127' stroke='%235684be' stroke-opacity='.25'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat;
+    box-shadow: 0 .15vh .3vh rgba(70, 50, 30, .14), 0 1.2vh 2.4vh -.6vh rgba(70, 50, 30, .28), inset 0 0 0 .1vh rgba(255, 255, 255, .7);
+    transform: translate(-50%, -50%) rotate(var(--r, 0deg));
+  }
+  .card .area { position: absolute; left: 6%; right: 6%; top: 21%; bottom: 6%; container-type: size; display: grid; place-items: center; }
+  .inkbox { position: relative; width: min(100cqw, calc(100cqh * var(--ar, 2.3))); aspect-ratio: var(--ar, 2.3); }
+  .inkbox img { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 0 .05vh rgba(29, 27, 24, .8)); }
+  .inkbox .row { display: none; }
+  .inkbox.revealing .full { display: none; }
+  .inkbox.revealing .row { display: block; }
+  .inkbox svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .under path { fill: none; stroke: var(--mark); stroke-linecap: round; opacity: .85; stroke-dasharray: 1; stroke-dashoffset: 1;
+                transition: stroke-dashoffset 1.2s cubic-bezier(.5, 0, .3, 1); }
+  .under path.on { stroke-dashoffset: 0; }
+  .boxes rect { fill: rgba(58, 109, 179, .06); stroke: var(--pencil); stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0; }
+  .boxes rect.on { stroke-dashoffset: 0; opacity: .9; transition: stroke-dashoffset .5s ease, opacity .2s; }
+  .boxes text { font: 600 11px var(--mono); fill: var(--pencil); opacity: 0; transition: opacity .3s .3s; }
+  .boxes text.on { opacity: .9; }
+  .nib { position: absolute; width: 1.2vh; height: 1.2vh; margin: -.6vh 0 0 -.6vh; border-radius: 50%; background: var(--mark);
+         box-shadow: 0 0 0 .5vh rgba(194, 64, 45, .18); display: none; }
+  .revealing .nib { display: block; }
+
+  .main { width: 42vw; display: none; z-index: 20; }
+  .main.shown { display: block; }
+  .postmark { position: absolute; right: 3%; top: -12%; width: 23%; aspect-ratio: 1; color: var(--mark); opacity: 0; mix-blend-mode: multiply; pointer-events: none; }
+  .postmark.landed { opacity: .92; transform: rotate(-9deg); }
+  .postmark text { font: 700 15px var(--mono); fill: currentColor; letter-spacing: .06em; }
+
+  /* an archive line (card/bank.py): no visitor wrote it here, so it has no handwriting. It is typed on a
+     plain manila slip with no notebook rules and stamped ARCHIVE, so it never passes for a visitor's card. */
+  .card.archive { background: #e7dcc4; }
+  .card.archive::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+                          box-shadow: inset 0 0 0 .55vh rgba(255, 255, 255, .25), inset 0 0 3vh rgba(120, 90, 40, .18); }
+  .archstamp { position: absolute; left: 5%; top: 8%; padding: .25em .7em .2em; border: .32vh double var(--mark); border-radius: .3vh;
+               color: var(--mark); font: 800 1.9vh var(--mono); letter-spacing: .32em; transform: rotate(-5deg); opacity: .85;
+               mix-blend-mode: multiply; pointer-events: none; }
+  #cands .archstamp { font-size: 1vh; border-width: .22vh; }
+  .archbox { position: relative; max-width: 100%; }
+  /* one line, as large as fits: a quote can be up to 40 characters (--n is its length, set in fillArchive) */
+  .archtext { font-family: var(--type); line-height: 1.15; font-size: min(5.2vh, calc(94cqw / (var(--n, 12) * .62)));
+              color: var(--ink); text-align: center; white-space: nowrap; }
+  .archlines { width: 80%; height: 46%; background: repeating-linear-gradient(to bottom, rgba(29, 27, 24, .2) 0 .55vh, transparent .55vh 2.1vh); }
+
+  /* reading: a blank card under a scanning beam */
+  #scan { width: 42vw; left: 50%; top: 40%; display: none; overflow: hidden; z-index: 15; }
+  .stage-reading #scan, .stage-confirm #scan { display: block; animation: rise .6s ease-out both; }
+  #scan::after { content: ""; position: absolute; left: 0; right: 0; height: 18%; top: -18%;
+                 background: linear-gradient(to bottom, transparent, rgba(58, 109, 179, .16) 70%, rgba(58, 109, 179, .7) 98%, transparent);
+                 animation: sweep 1.5s cubic-bezier(.5, 0, .5, 1) infinite; }
+  @keyframes sweep { to { top: 100% } }
+  @keyframes rise { from { opacity: 0; transform: translate(-50%, -46%) } to { opacity: 1; transform: translate(-50%, -50%) } }
+
+  /* the cards being compared, and the threads to them */
+  #cands .card { width: 11.5vw; z-index: 10; opacity: 0; transition: opacity .5s, transform .6s, box-shadow .4s; }
+  #cands .card.on { opacity: 1; }
+  #cands .card.look { transform: translate(-50%, -56%) rotate(var(--r)); box-shadow: 0 .2vh .4vh rgba(70, 50, 30, .16), 0 2vh 3vh -1vh rgba(58, 109, 179, .45); }
+  #cands .card .tag { position: absolute; left: 0; top: -2.6vh; font-size: 1.15vh; letter-spacing: .14em; color: var(--soft); }
+  #threads { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 12; }
+  #threads path { fill: none; stroke-linecap: round; }
+  #threads .seek { stroke: var(--pencil); stroke-width: .16vh; stroke-dasharray: .6vh .8vh; opacity: .55; animation: flow .9s linear infinite; }
+  #threads .bond { stroke: var(--mark); stroke-width: .26vh; opacity: .85; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.4s ease .3s; }
+  #threads .bond.on { stroke-dashoffset: 0; }
+  @keyframes flow { to { stroke-dashoffset: -2.8vh } }
+
+  /* notes: what the machine did, in its own terse terms */
+  #notes { position: absolute; left: 50%; top: 69vh; width: 42vw; transform: translateX(-50%); z-index: 25; }
+  .line { display: flex; align-items: baseline; gap: 1.6vh; font-size: 1.5vh; letter-spacing: .14em; color: var(--soft); min-height: 3.2vh;
+          opacity: 0; transform: translateY(.6vh); transition: opacity .5s, transform .5s; }
+  .line.on { opacity: 1; transform: none; }
+  .line b { color: var(--ink); font-weight: 700; }
+  .line .ok { color: var(--mark); font-weight: 700; }
+  .typed { font: 3vh/1.25 var(--type); letter-spacing: .01em; color: var(--ink); text-transform: none; }
+  .typed::after { content: ""; display: inline-block; width: .5vh; height: 2.6vh; margin-left: .3vh; background: var(--mark); vertical-align: -.3vh; animation: caret .9s steps(1) infinite; }
+  .typed.done::after { display: none; }
+  @keyframes caret { 50% { opacity: 0 } }
+  .bar { flex: 1; height: .25vh; background: var(--faint); position: relative; align-self: center; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ink); }
+  .bar i::after { content: ""; position: absolute; right: -.5vh; top: -.5vh; width: 1.2vh; height: 1.2vh; border-radius: 50%; background: var(--mark); }
+
+  /* the visitor's own card never shows here: it travels as a sealed envelope */
+  #env { position: absolute; width: 15vw; aspect-ratio: 127 / 76; transform: translate(-50%, -50%) rotate(-3deg); display: none; z-index: 18;
+         background:
+           linear-gradient(to bottom right, transparent calc(50% - .08vh), rgba(29, 27, 24, .22) 50%, transparent calc(50% + .08vh)) 0 0 / 50% 62% no-repeat,
+           linear-gradient(to bottom left, transparent calc(50% - .08vh), rgba(29, 27, 24, .22) 50%, transparent calc(50% + .08vh)) 100% 0 / 50% 62% no-repeat,
+           #efe6d4;
+         border-radius: .5vh; box-shadow: 0 .15vh .3vh rgba(70, 50, 30, .14), 0 1.2vh 2.4vh -.6vh rgba(70, 50, 30, .28); }
+  #env::after { content: ""; position: absolute; left: 50%; top: 62%; width: 3.4vh; height: 3.4vh; margin: -1.7vh 0 0 -1.7vh; border-radius: 50%;
+                background: radial-gradient(circle at 38% 35%, #d9634e, var(--mark) 60%, #8f2a1c); box-shadow: 0 .2vh .4vh rgba(90, 20, 10, .35); }
+  #env.shown { display: block; }
+  @keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
+
+  /* idle: the loose stack, and the team's own handwriting */
+  #stack { position: absolute; inset: 0; transition: opacity .8s; }
+  #stack .card { width: 19vw; transition: left 1.6s ease-in-out, top 1.6s ease-in-out, transform 1.6s ease-in-out, box-shadow 1.6s; }
+  #stack .card.lift { transform: translate(-50%, -64%) rotate(calc(var(--r) * 1.5)); box-shadow: 0 .3vh .6vh rgba(70, 50, 30, .14), 0 3vh 4vh -1vh rgba(70, 50, 30, .3); }
+  body:not(.stage-idle):not(.stage-card) #stack { opacity: 0; }
+  #invite { position: absolute; left: 50%; top: 1vh; transform: translateX(-50%); max-width: 50vw; max-height: 20vh; display: none;
+            filter: drop-shadow(0 0 .06vh rgba(29, 27, 24, .85)); transition: opacity .8s; }
+  #invite.shown { display: block; }
+  body:not(.stage-idle):not(.stage-card) #invite { opacity: 0; }
+
+  /* ---------- the machine ---------- */
+  #machine { position: absolute; right: 3vw; top: 11vh; width: 33vw; height: 80vh; }
+  #machine .frame { position: absolute; inset: 0; border: .12vh solid var(--faint); }
+  #machine .frame::before, #machine .frame::after { content: ""; position: absolute; width: 2.2vh; height: 2.2vh; border: .3vh solid var(--ink); }
+  #machine .frame::before { left: -.3vh; top: -.3vh; border-right: 0; border-bottom: 0; }
+  #machine .frame::after { right: -.3vh; bottom: -.3vh; border-left: 0; border-top: 0; }
+  .mhead { position: absolute; left: 2.2vh; right: 2.2vh; top: 1.8vh; display: flex; justify-content: space-between; font-size: 1.3vh; letter-spacing: .18em; color: var(--soft); }
+  .mhead b { color: var(--ink); }
+  #live::before { content: ""; display: inline-block; width: .9vh; height: .9vh; border-radius: 50%; background: var(--faint); margin-right: .8vh; vertical-align: .05vh; }
+  #live.on { color: var(--mark); } #live.on::before { background: var(--mark); animation: beat 1.2s ease-in-out infinite; }
+  #arm { position: absolute; left: 0; right: 0; top: 5vh; height: 52vh; }
+  #cam-wrap { display: none; position: absolute; left: 2.2vh; right: 2.2vh; top: 35vh; height: 30vh; background: #1d1a16; overflow: hidden; }
+  #cam-wrap img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  #cam-wrap span { position: absolute; left: 1vh; top: .9vh; padding: .3vh .7vh; font-size: 1.1vh; letter-spacing: .16em; color: #fff; background: rgba(0, 0, 0, .5); }
+  #machine.cam-on #arm { height: 30vh; }
+  #machine.cam-on #cam-wrap { display: block; }
+  #tele { position: absolute; left: 2.2vh; right: 2.2vh; bottom: 2vh; display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.4vh; font-size: 1.15vh; letter-spacing: .12em; color: var(--soft); }
+  #tele div { border-top: .12vh solid var(--faint); padding-top: 1vh; }
+  #tele b { display: block; margin-top: .6vh; font-size: 2.1vh; letter-spacing: .02em; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #tele .gauge { height: .3vh; background: var(--faint); margin-top: .9vh; position: relative; }
+  #tele .gauge i { position: absolute; top: -.35vh; width: .25vh; height: 1vh; background: var(--mark); left: 50%; transition: left .3s; }
+  #phase { position: absolute; left: 2.2vh; right: 2.2vh; bottom: 11.5vh; font-size: 1.3vh; letter-spacing: .18em; color: var(--soft); display: flex; justify-content: space-between; }
+  #phase b { color: var(--ink); }
+
+  /* ---------- arm offline: the simulation clip, always labeled as one ---------- */
+  #sim { position: absolute; inset: 0; background: #111; display: none; align-items: center; justify-content: center; z-index: 90; }
+  .sim-on #sim { display: flex; }
+  #sim video { max-width: 100%; max-height: 100%; }
+  #sim .label { position: absolute; left: 0; right: 0; top: 0; padding: 14px 0; text-align: center; background: #f2c200; color: #111;
+                font: 800 clamp(28px, 5vw, 64px)/1.1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .22em; }
+  #sim .label.foot { top: auto; bottom: 0; }
+  #flash { position: absolute; inset: 0; background: #fffdf8; opacity: 0; pointer-events: none; z-index: 80; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+
+<header id="top">
+  <div class="brand"><i></i><span id="name"></span></div>
+  <ol id="steps"></ol>
+  <div class="meta"><span id="count"></span><span id="clock"></span></div>
+</header>
+
+<section id="desk">
+  <div id="stack"></div>
+  <img id="invite" alt="">
+  <div class="card" id="scan"></div>
+  <div id="cands"></div>
+  <svg id="threads"></svg>
+  <div id="env"></div>
+  <div class="card main" id="theirs"><div class="area"></div>
+    <svg class="postmark" viewBox="0 0 150 150">
+      <defs><filter id="inky"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="4"/><feDisplacementMap in="SourceGraphic" scale="3"/></filter></defs>
+      <g filter="url(#inky)">
+        <circle cx="75" cy="75" r="70" fill="none" stroke="currentColor" stroke-width="3.2"/>
+        <circle cx="75" cy="75" r="58" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text id="pm-a" x="75" y="52" text-anchor="middle"></text>
+        <path d="M40 75 H110 M100 68 L110 75 L100 82" fill="none" stroke="currentColor" stroke-width="2.2"/>
+        <text id="pm-b" x="75" y="104" text-anchor="middle"></text>
+        <text id="pm-c" x="75" y="124" text-anchor="middle" style="font-size:11px"></text>
+      </g>
+    </svg>
+  </div>
+  <div id="notes"><div class="line" id="l1"></div><div class="line" id="l2"></div><div class="line" id="l3"></div></div>
+</section>
+
+<aside id="machine"><div class="frame"></div>
+  <div class="mhead"><span id="mname"></span><span id="live"></span></div>
+  <div id="arm"></div>
+  <div id="cam-wrap"><img id="cam" alt=""><span id="cam-label"></span></div>
+  <div id="phase"><span id="phase-k"></span><b id="phase-v"></b></div>
+  <div id="tele"></div>
+</aside>
+
+<div id="flash"></div>
+<div id="sim"><video id="sim-video" muted playsinline loop preload="none"></video>
+  <div class="label">SIMULATION</div><div class="label foot">SIMULATION</div></div>
+
+<script type="module">
+  /* Every word this screen shows, in one place. These are placeholders: the team rewrites them.
+     No sentence here is written by a model, and the visitor's and stranger's lines are their own. */
+  const LABELS = {
+    name: 'HAND-ME-DOWN', machine: 'SO-101 FOLLOWER', live: 'LIVE', offline: 'OFFLINE',
+    steps: {read: 'READ', match: 'MATCH', write: 'WRITE', deliver: 'DELIVER'},
+    waiting: n => `${n} WAITING`, delivered: n => `${n} DELIVERED`,
+    reading: 'READING HANDWRITING', read: (n, s) => `READ  <b>${n}</b> WORDS${s != null ? `  <b>${s.toFixed(1)}</b> S` : ''}`,
+    checking: 'CHECKING THE READ', comparing: n => `COMPARING WITH <b>${n}</b> CARDS`,
+    received: 'YOU RECEIVE', checked: 'PHRASE FOUND ON CARD', picked: s => `PICKED IN <b>${s}</b> S`, rule: 'PICKED BY RULE',
+    house: 'FROM THE HOUSE',
+    archive: 'ARCHIVE', archive_line: src => `FROM THE ARCHIVE${src ? `  <b>${src}</b>` : ''}`, archived: n => `${n} ARCHIVE`,
+    pen: 'PEN', delivered_at: (t, d) => `DELIVERED <b>${t}</b>  TOOK <b>${d}</b>`, returned: 'RETURNED TO THE STACK',
+    camera: 'LIVE CAMERA', phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
+  };
+
+  const $ = id => document.getElementById(id);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const desk = $('desk');
+  const nnn = n => String(n).padStart(3, '0');
+  const mmss = s => s == null ? '–' : Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
+  let cur = {stage: null}, seen = null, clockOffset = 0, theirs = null, theirsKey = null, candEls = [];
+
+  /* ---------- static furniture ---------- */
+  $('name').textContent = LABELS.name; $('mname').textContent = LABELS.machine;
+  $('steps').innerHTML = Object.entries(LABELS.steps).map(([k, v], i) => `<li data-s="${k}">0${i + 1} ${v}</li>`).join('');
+  $('tele').innerHTML = LABELS.joints.map(([j, n, k]) => `<div>${j} ${n}<b id="t-${k}">–</b><div class="gauge"><i id="g-${k}"></i></div></div>`).join('');
+  $('phase-k').textContent = LABELS.phase;
+  setInterval(() => { const d = new Date(Date.now() + clockOffset * 1000); $('clock').textContent = d.toTimeString().slice(0, 8); }, 250);
+
+  /* ---------- where things sit on the desk (desk-relative, in px) ---------- */
+  const D = () => desk.getBoundingClientRect();
+  const vw = v => v * innerWidth / 100, vh = v => v * innerHeight / 100;
+  function place(el, x, y, r = 0) { el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.setProperty('--r', r + 'deg'); }
+  const CENTER = () => [D().width / 2, vh(36)];
+  const CORNER = () => [vw(9), vh(9)];
+
+  /* ---------- a line of handwriting on a card ---------- */
+  function rng(seed) { let s = (seed * 9301 + 49297) % 233280 || 1; return () => (s = (s * 9301 + 49297) % 233280) / 233280; }
+  function underline(m, W, H, r) {
+    const [l, t, w, h] = m, wh = h * H, x0 = (l - .008) * W, x1 = (l + w + .01) * W, y = (t + h) * H + .07 * wh, pts = [];
+    for (let i = 0; i <= 4; i++) pts.push([x0 + (x1 - x0) * i / 4, y + (r() - .5) * .09 * wh - (i / 4) * .07 * wh]);
+    let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+    for (let i = 1; i < pts.length; i++) { const [px, py] = pts[i - 1], [x, yy] = pts[i]; d += ` Q${((px + x) / 2).toFixed(1)},${((py + yy) / 2 + (r() - .5) * .05 * wh).toFixed(1)} ${x.toFixed(1)},${yy.toFixed(1)}`; }
+    return {d, w: Math.max(2, .065 * wh)};
+  }
+  function svgEl(tag, attrs, parent) { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; }
+
+  function fillCard(el, url, size, opts = {}) {
+    const area = el.querySelector('.area'); area.innerHTML = '';
+    if (!url) return null;
+    const W = size ? size[0] : 1000, H = size ? size[1] : 430;
+    const box = document.createElement('div'); box.className = 'inkbox'; box.style.setProperty('--ar', W / H);
+    const full = new Image(); full.className = 'full'; full.src = url; full.alt = ''; box.appendChild(full);
+    const R = opts.rows && opts.rows.length ? opts.rows : [[0, 0, 1, 1]];
+    const bands = R.map((r, i) => [i ? (R[i - 1][3] + r[1]) / 2 : 0, i < R.length - 1 ? (r[3] + R[i + 1][1]) / 2 : 1]);
+    const rowEls = R.map(() => { const im = new Image(); im.className = 'row'; im.src = url; im.alt = ''; box.appendChild(im); return im; });
+    const out = {box, full, rowEls, bands, R, markEls: [], boxEls: [], W, H};
+    if (opts.words && opts.words.length) {            // the read: a pencil box around every word
+      const g = svgEl('svg', {class: 'boxes', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none'}, box);
+      opts.words.forEach(([l, t, w, h], i) => {
+        const rect = svgEl('rect', {x: l * W, y: t * H, width: w * W, height: h * H, rx: 4, pathLength: 1, 'stroke-width': Math.max(1.5, .012 * H)}, g);
+        const tx = svgEl('text', {x: l * W + 3, y: t * H - 5}, g); tx.textContent = String(i + 1).padStart(2, '0');
+        out.boxEls.push([rect, tx]);
+      });
+    }
+    if (opts.marks && opts.marks.length) {             // the quote: a red line drawn under it, by hand
+      const g = svgEl('svg', {class: 'under', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none'}, box);
+      const r = rng(opts.seed || 7);
+      opts.marks.forEach(m => {
+        const {d, w} = underline(m, W, H, r), p = svgEl('path', {d, pathLength: 1, 'stroke-width': w.toFixed(1)}, g);
+        const mid = m[1] + m[3] / 2, row = Math.max(0, bands.findIndex(([a, b]) => mid >= a && mid <= b)), x0 = R[row][0];
+        out.markEls.push({p, row, m, at: Math.min(1, (m[0] + m[2] - x0) / Math.max(1e-3, 1 - x0))});
+      });
+    }
+    out.nib = document.createElement('div'); out.nib.className = 'nib'; box.appendChild(out.nib);
+    area.appendChild(box);
+    return out;
+  }
+  function unarchive(el) { el.classList.remove('archive'); el.querySelectorAll(':scope > .archstamp').forEach(x => x.remove()); }
+  function fillArchive(el, text) {
+    const area = el.querySelector('.area'); area.innerHTML = '';
+    el.classList.add('archive');
+    if (!el.querySelector(':scope > .archstamp')) { const st = document.createElement('span'); st.className = 'archstamp'; st.textContent = LABELS.archive; el.appendChild(st); }
+    if (text == null) { const bars = document.createElement('div'); bars.className = 'archlines'; area.appendChild(bars); return null; }
+    const box = document.createElement('div'); box.className = 'archbox';
+    const t = document.createElement('div'); t.className = 'archtext'; t.textContent = `“${text}”`; box.appendChild(t);
+    t.style.setProperty('--n', String([...text].length + 2));
+    const nib = document.createElement('div'); nib.className = 'nib'; box.appendChild(nib);
+    area.appendChild(box);
+    return {archive: true, box, text: t, nib, markEls: []};
+  }
+  function reveal(c, p) {
+    if (!c) return;
+    if (c.archive) {
+      c.text.style.clipPath = `inset(0 ${((1 - p) * 100).toFixed(2)}% 0 0)`;
+      c.nib.style.left = p * 100 + '%'; c.nib.style.top = '55%'; c.nib.style.visibility = p > 0 && p < 1 ? 'visible' : 'hidden';
+      return;
+    }
+    const widths = c.R.map(r => 1 - r[0]), total = widths.reduce((a, b) => a + b, 0) || 1;
+    let left = p * total, active = false;
+    c.R.forEach((r, i) => {
+      const f = Math.max(0, Math.min(1, left / widths[i])); left -= widths[i];
+      const edge = r[0] + f * (1 - r[0]), [top, bottom] = c.bands[i];
+      c.rowEls[i].style.clipPath = `inset(${(top * 100).toFixed(2)}% ${((1 - edge) * 100).toFixed(2)}% ${((1 - bottom) * 100).toFixed(2)}% 0)`;
+      if (f > 0 && f < 1 && !active) { active = true; c.nib.style.left = edge * 100 + '%'; c.nib.style.top = (r[1] + r[3]) / 2 * 100 + '%'; }
+      c.markEls.filter(m => m.row === i && f >= m.at).forEach(m => m.p.classList.add('on'));
+    });
+    c.nib.style.visibility = active ? 'visible' : 'hidden';
+  }
+  const finish = c => { if (c) { c.box.classList.remove('revealing'); c.markEls.forEach(m => m.p.classList.add('on')); if (c.archive) c.text.style.clipPath = 'none'; } };
+
+  /* ---------- notes under the card ---------- */
+  function note(id, html, cls = '') { const el = $(id); el.className = 'line ' + cls; el.innerHTML = html; requestAnimationFrame(() => el.classList.add('on')); return el; }
+  const clearNotes = () => ['l1', 'l2', 'l3'].forEach(id => { $(id).className = 'line'; $(id).innerHTML = ''; });
+  function typeOut(id, text, after = 0) {
+    const el = note(id, '<span class="typed"></span>'), span = el.querySelector('.typed');
+    if (reduce) { span.textContent = `“${text}”`; span.classList.add('done'); return; }
+    let i = 0; const full = `“${text}”`;
+    setTimeout(function step() { span.textContent = full.slice(0, ++i); if (i < full.length) setTimeout(step, 38 + Math.random() * 40); else span.classList.add('done'); }, after);
+  }
+
+  /* ---------- moving cards ---------- */
+  function play(el, frames, ms, easing = 'cubic-bezier(.45, 0, .2, 1)') {
+    el.getAnimations().forEach(a => a.cancel());
+    if (reduce) return Promise.resolve();
+    return el.animate(frames, {duration: ms, easing}).finished.catch(() => {});
+  }
+  const T = (s = 1, r = 'var(--r)') => `translate(-50%, -50%) rotate(${r}) scale(${s})`;
+  function moveTo(el, [x, y], r, width, ms = 900) {
+    const from = el.getBoundingClientRect(), d = D();
+    el.style.width = width; place(el, x, y, r);
+    const to = el.getBoundingClientRect();
+    if (reduce || !from.width) return Promise.resolve();
+    const dx = (from.left + from.width / 2) - (to.left + to.width / 2), dy = (from.top + from.height / 2) - (to.top + to.height / 2);
+    return play(el, [{transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(var(--r)) scale(${from.width / to.width})`}, {transform: T()}], ms);
+  }
+  function stamp(el) {
+    const pm = el.querySelector('.postmark'); pm.classList.remove('landed');
+    if (reduce) { pm.classList.add('landed'); return; }
+    pm.animate([{opacity: 0, transform: 'rotate(-17deg) scale(1.9)'}, {opacity: 1, transform: 'rotate(-9deg) scale(.93)', offset: .55},
+                {transform: 'rotate(-9deg) scale(1.03)', offset: .74}, {opacity: .92, transform: 'rotate(-9deg) scale(1)'}],
+               {duration: 560, easing: 'cubic-bezier(.3, 0, .4, 1)'}).finished.then(() => pm.classList.add('landed')).catch(() => {});
+    el.animate([{transform: T(), offset: 0}, {transform: T(), offset: .52}, {transform: `translate(-50%, -48.8%) rotate(var(--r)) scale(.994)`, offset: .62},
+                {transform: `translate(-50%, -50.3%) rotate(var(--r))`, offset: .8}, {transform: T()}], {duration: 620, easing: 'ease-out'});
+  }
+
+  /* ---------- threads between cards ---------- */
+  const threads = $('threads');
+  function anchor(el, fx, fy) { const r = el.getBoundingClientRect(), d = D(); return [r.left - d.left + r.width * fx, r.top - d.top + r.height * fy]; }
+  function curve([x0, y0], [x1, y1], bend = .25) { const mx = (x0 + x1) / 2, my = (y0 + y1) / 2 - Math.abs(x1 - x0) * bend; return `M${x0},${y0} Q${mx},${my} ${x1},${y1}`; }
+  let threadMode = null;
+  function drawThreads() {
+    threads.innerHTML = '';
+    const env = $('env');
+    if (threadMode === 'seek' && env.classList.contains('shown')) {
+      candEls.forEach(c => svgEl('path', {class: 'seek', d: curve(anchor(env, .5, 1), anchor(c, .5, 0), -.05)}, threads));
+    }
+    if (threadMode === 'bond' && theirs && env.classList.contains('shown') && $('theirs').classList.contains('shown')) {
+      const r = theirs.box.getBoundingClientRect(), d = D();
+      const p = svgEl('path', {class: 'bond on', d: curve(anchor(env, .92, .7), [r.left - d.left + .02 * r.width, r.top - d.top + .55 * r.height], .18), pathLength: 1}, threads);
+    }
+  }
+
+  /* ---------- idle stack ---------- */
+  const SPOTS = [[0, 0, -3], [-12, -6, 6], [12, -9, -5], [-17, 9, -9], [15, 8, 4], [-3, -14, 8], [4, 13, -2]];
+  let stackEls = [], stackSig = '';
+  async function loadStack() {
+    let data; try { data = await (await fetch('/stack.json', {cache: 'no-store'})).json(); } catch (e) { return; }
+    $('count').textContent = `${LABELS.waiting(data.waiting ?? 0)}${data.archive ? `   ${LABELS.archived(data.archive)}` : ''}   ${LABELS.delivered(data.delivered ?? 0)}`;
+    const inv = $('invite');
+    if (data.invitation) { inv.src = data.invitation; inv.classList.add('shown'); } else inv.classList.remove('shown');
+    const cards = data.cards.slice(0, 6), sig = cards.map(c => c.no).join(',') + '|' + !!data.invitation;
+    if (sig === stackSig) return;
+    stackSig = sig;
+    const stack = $('stack'); stack.innerHTML = '';
+    const items = cards.map(c => ({url: c.ink, size: c.size, no: c.no}));
+    while (items.length < 3) items.push({url: null});
+    stackEls = items.map(it => { const el = document.createElement('div'); el.className = 'card'; el.innerHTML = '<div class="area"></div>'; stack.appendChild(el); if (it.url) fillCard(el, it.url, it.size); return el; });
+    layoutStack();
+  }
+  function layoutStack() {
+    const [cx] = CENTER(), cy = $('invite').classList.contains('shown') ? vh(48) : vh(40);
+    stackEls.forEach((el, i) => { const [dx, dy, r] = SPOTS[i % SPOTS.length]; place(el, cx + vw(dx), cy + vh(dy), r); el.style.zIndex = 50 - i; });
+  }
+  setInterval(() => {
+    if (reduce || stackEls.length < 2 || !document.body.classList.contains('stage-idle')) return;
+    const top = stackEls[0]; top.classList.add('lift');
+    setTimeout(() => { stackEls.push(stackEls.shift()); top.classList.remove('lift'); layoutStack(); }, 900);
+  }, 9000);
+
+  /* ---------- the stage machine ---------- */
+  function steps(now) {
+    const order = ['read', 'match', 'write', 'deliver'];
+    const at = {reading: 0, confirm: 0, choosing: 1, card: 1, writing: 2, held: 2, delivered: 3}[now];
+    document.querySelectorAll('#steps li').forEach((li, i) => {
+      li.className = at == null ? '' : i < at || (now === 'delivered' && i === 3) ? 'done' : i === at ? 'now' : '';
+    });
+  }
+
+  function onState(prev, s) {
+    const was = prev.stage, now = s.stage, env = $('env'), theirsEl = $('theirs');
+    document.body.className = 'stage-' + now + (s.sim ? ' sim-on' : '');
+    steps(now);
+    const clip = $('sim-video');
+    if (s.sim && clip.paused) { if (!clip.src) clip.src = '/sim.mp4'; clip.currentTime = 0; clip.play().catch(() => {}); }
+    if (!s.sim && !clip.paused) clip.pause();
+    loadStack();
+
+    // reading and confirm: the card is under the camera and then with the operator. The public
+    // screen never shows it, only that it was read and how long that took.
+    if (now === 'reading' || now === 'confirm') {
+      place($('scan'), ...CENTER(), 0); $('scan').style.display = 'block';
+      if (now === 'reading') { clearNotes(); $('scan').innerHTML = ''; note('l1', LABELS.reading); }
+      if (now === 'reading' && was !== 'reading' && !reduce) $('flash').animate([{opacity: 0}, {opacity: .7, offset: .15}, {opacity: 0}], {duration: 700});
+      if (now === 'confirm' && was !== 'confirm') { clearNotes(); note('l1', LABELS.read(s.words || 0, s.read_secs)); note('l2', LABELS.checking);
+        if (s.mine) { $('scan').innerHTML = '<div class="area"></div>'; fillCard($('scan'), s.mine, s.mine_size); note('l2', '').textContent = s.mine_line || ''; } }
+    } else { $('scan').style.display = ''; $('scan').innerHTML = ''; }
+
+    // matching: the visitor's card, sealed, and the waiting cards it is compared with
+    if (now === 'choosing' || now === 'card') {
+      place(env, ...CORNER(), -3);
+      if (!env.classList.contains('shown')) { env.classList.add('shown'); play(env, [{opacity: 0, transform: 'translate(-50%, -30%) rotate(-3deg) scale(.8)'}, {opacity: 1, transform: T()}], 700); }
+      clearNotes();
+      const cands = (s.candidates || []);
+      $('cands').innerHTML = ''; candEls = [];
+      if (now === 'choosing' && cands.length) {
+        note('l1', LABELS.comparing(cands.length));
+        const d = D(), n = cands.length, span = Math.min(d.width * .86, n * vw(13));
+        cands.forEach((c, i) => {
+          const el = document.createElement('div'); el.className = 'card'; el.dataset.no = c.no;
+          el.innerHTML = `<div class="area"></div><span class="tag">${c.archive ? LABELS.archive : `No. ${nnn(c.no)}`}</span>`;
+          $('cands').appendChild(el); if (c.archive) fillArchive(el, null); else fillCard(el, c.ink, c.size);
+          place(el, d.width / 2 - span / 2 + span * (i + .5) / n, vh(52) + (i % 2 ? vh(3) : 0), [-4, 3, -2, 5, -3, 2][i % 6]);
+          setTimeout(() => el.classList.add('on'), reduce ? 0 : 300 + i * 120);
+          candEls.push(el);
+        });
+        threadMode = 'seek';
+        let k = 0; clearInterval(window.lookTimer);
+        if (!reduce) window.lookTimer = setInterval(() => { candEls.forEach((e, i) => e.classList.toggle('look', i === k % candEls.length)); k++; }, 420);
+      }
+      if (now === 'card') threadMode = null;
+    } else { clearInterval(window.lookTimer); }
+
+    // the words they receive: lifted out of the card they came from, written, stamped
+    const key = s.job != null ? `${s.job}:${s.stranger}` : null, archive = s.provenance === 'archive';
+    if (now === 'writing' || now === 'delivered') {
+      if (theirsKey !== key) {
+        const whole = [[.04, .12, .96, .9]];                                   // the received phrase is one row
+        if (archive) theirs = fillArchive(theirsEl, s.quote || '');
+        else { unarchive(theirsEl); theirs = fillCard(theirsEl, s.stranger, s.stranger_size, {rows: whole, marks: s.house ? [] : [[.03, .1, .94, .72]], seed: (s.job || 3) * 7 + 3}); }
+        theirsKey = key;
+        theirsEl.querySelector('.postmark').classList.remove('landed');
+        const from = candEls.find(c => +c.dataset.no === s.job);
+        theirsEl.style.width = '40vw'; place(theirsEl, D().width / 2 + vw(3), vh(40), .7); theirsEl.classList.add('shown');
+        if (theirs && now === 'writing') { theirs.box.classList.add('revealing'); reveal(theirs, 0); }
+        if (from && !reduce) {
+          const a = from.getBoundingClientRect(), b = theirsEl.getBoundingClientRect();
+          play(theirsEl, [{transform: `translate(calc(-50% + ${(a.left + a.width / 2) - (b.left + b.width / 2)}px), calc(-50% + ${(a.top + a.height / 2) - (b.top + b.height / 2)}px)) rotate(var(--r)) scale(${a.width / b.width})`}, {transform: T()}], 1000);
+        } else if (was !== null && now === 'writing') play(theirsEl, [{opacity: 0, transform: `translate(-50%, -46%) rotate(var(--r))`}, {opacity: 1, transform: T()}], 800);
+        candEls.forEach(c => c.classList.remove('on')); setTimeout(() => { $('cands').innerHTML = ''; candEls = []; }, 600);
+        if (env.classList.contains('shown')) { place(env, ...CORNER(), -3); threadMode = 'bond'; }
+        clearNotes();
+        if (s.quote) {
+          note('l1', `${LABELS.received}<span class="typed done">“${s.quote}”</span>`);
+          note('l2', `<span class="ok">✓</span> ${archive ? LABELS.archive_line(s.source) : `${LABELS.checked} <b>${nnn(s.job)}</b>`}${s.by === 'hermes' && s.pick_secs != null ? `   ${LABELS.picked(s.pick_secs)}` : s.by !== 'hermes' ? `   ${LABELS.rule}` : ''}`);
+        } else if (s.house) note('l1', LABELS.house);
+        note('l3', `${LABELS.pen} <span class="bar"><i id="penbar"></i></span> <b id="pentime">0:00</b>`);
+      }
+      if (now === 'delivered') {
+        finish(theirs);
+        const p = s.postmark || {};
+        $('pm-a').textContent = p.provenance === 'archive' ? LABELS.archive : (p.written_at || ''); $('pm-b').textContent = (String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || [''])[0]; $('pm-c').textContent = mmss(p.duration_s);
+        note('l3', LABELS.delivered_at((String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || ['–'])[0], mmss(p.duration_s)));
+        if (was === 'writing') stamp(theirsEl); else theirsEl.querySelector('.postmark').classList.add('landed');
+      }
+    } else if (theirsEl.classList.contains('shown')) {
+      const done = () => { theirsEl.classList.remove('shown'); theirsKey = null; theirs = null; };
+      if (now === 'held') { note('l3', LABELS.returned); play(theirsEl, [{opacity: 1, transform: T()}, {opacity: 0, transform: `translate(-50%, -40%) rotate(var(--r)) scale(.6)`}], 900).then(done); }
+      else play(theirsEl, [{opacity: 1}, {opacity: 0}], 700).then(done);
+    }
+    if (['idle', 'reading', 'confirm'].includes(now)) {
+      if (env.classList.contains('shown')) play(env, [{opacity: 1}, {opacity: 0}], 500).then(() => env.classList.remove('shown'));
+      threadMode = null;
+      $('cands').innerHTML = ''; candEls = [];
+      if (now === 'idle') clearNotes();
+    }
+  }
+
+  function frame() {
+    if (cur.stage === 'writing' && theirs) {
+      const t = Date.now() / 1000 + clockOffset, el = t - (cur.started || t), p = Math.max(0, Math.min(.985, el / (cur.est_s || 90)));
+      reveal(theirs, p);
+      const bar = $('penbar'), tm = $('pentime');
+      if (bar) bar.style.width = (p * 100).toFixed(1) + '%';
+      if (tm) tm.textContent = `${mmss(el)} / ${mmss(cur.est_s || 90)}`;
+    }
+    if (threadMode) drawThreads(); else if (threads.firstChild) threads.innerHTML = '';
+    requestAnimationFrame(frame);
+  }
+
+  async function tick() {
+    try {
+      const s = await (await fetch('/state.json', {cache: 'no-store'})).json();
+      if (s.now) clockOffset = s.now - Date.now() / 1000;
+      if (s.v !== seen || s.sim !== cur.sim) { const prev = cur; cur = s; seen = s.v; onState(prev, s); }
+    } catch (e) {}
+    setTimeout(tick, 350);
+  }
+
+  /* ---------- the machine: the live 3D arm, and its joints ---------- */
+  let lastT = null, lastSeen = 0;
+  async function pose() {
+    try {
+      const p = await (await fetch('/pose.json', {cache: 'no-store'})).json();
+      const fresh = p && p.pos && (p.t !== lastT || Date.now() / 1000 + clockOffset - p.t < 2);
+      if (p && p.t !== lastT) { lastT = p.t; lastSeen = Date.now(); }
+      const live = fresh && Date.now() - lastSeen < 2000;
+      $('live').textContent = live ? LABELS.live : LABELS.offline; $('live').className = live ? 'on' : '';
+      $('phase-v').textContent = live && p.phase ? p.phase.toUpperCase() : (cur.stage === 'writing' ? '–' : LABELS.idle);
+      LABELS.joints.forEach(([, , k]) => {
+        const v = live ? p.pos[k] : null;
+        $('t-' + k).textContent = v == null ? '–' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '°';
+        $('g-' + k).style.left = v == null ? '50%' : Math.max(0, Math.min(100, 50 + v / 3.6)) + '%';
+      });
+    } catch (e) {}
+    setTimeout(pose, 250);
+  }
+  try {
+    const { mountArm } = await import('/screen/arm/arm.js');
+    mountArm($('arm'), {sceneUrl: '/screen/arm/scene.json', meshBase: '/sim/so101/assets/', poseUrl: '/pose.json'});
+  } catch (e) { console.error('arm panel', e); }
+
+  addEventListener('resize', () => layoutStack());
+
+  /* the overhead camera, sent by the arm laptop; the panel falls back to the full 3D arm without it */
+  $('cam-label').textContent = LABELS.camera;
+  let camOn = false;
+  const setCam = on => { if (on !== camOn) { camOn = on; $('machine').classList.toggle('cam-on', on); window.dispatchEvent(new Event('resize')); } };
+  function camera() {
+    const next = new Image();
+    next.onload = () => { $('cam').src = next.src; setCam(true); setTimeout(camera, 350); };
+    next.onerror = () => { setCam(false); setTimeout(camera, 1500); };
+    next.src = '/cam.jpg?t=' + Date.now();
+  }
+  loadStack(); tick(); pose(); camera(); requestAnimationFrame(frame);
+  setInterval(loadStack, 20000);
+</script>
+</html>

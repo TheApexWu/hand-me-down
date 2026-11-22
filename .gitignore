@@ -7,3 +7,15 @@ hermes-install.sh
 sim/traj*.json
 runs/
 state/
+
+# card side: runtime data (photos of visitors' cards stay off the repo)
+.env
+cards/
+jobs/
+done/
+cache/
+.pytest_cache/
+# the team's own handwriting for the screen (python -m card handwriting ...)
+screen/invitation.png
+screen/house.png
+screen/sim-demo.mp4

@@ -1,0 +1,8 @@
+opencv-python-headless>=4.10
+numpy>=2
+reductoai>=0.27
+mcp>=2,<3
+pytest>=8
+# only for card/trace_check.py, which runs the tracer in sim/ (its imports)
+scikit-image>=0.26
+pillow>=10

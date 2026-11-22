@@ -3,7 +3,8 @@
   check(line) -> {"hold": bool, "reasons": [...], "safety": label, "ai": {...}}
 
 Contact details are caught by rule and never sent onward. Hermes, with no tools, labels safety, and any
-failure holds the card. Pangram asks whether the words look AI-written and can only flag a card for review.
+failure holds the card. Pangram asks whether the words look AI-written and can only flag a card for review,
+and only once `python -m card.pangram_eval` says ready_to_claim (see PANGRAM_LIVE).
 """
 import json
 import os
@@ -18,6 +19,11 @@ LABELS = {"ok", "self_harm", "threat", "hate", "sexual", "private_info"}
 HERMES_CMD = os.environ.get("HMD_GATE_CMD", "docker exec -i hmd-hermes hermes -p gate chat --query-file - -Q "
                                             "--format stream-json --max-turns 1")
 PANGRAM = "https://text.external-api.pangram.com/task"
+# Pangram joins the live decision only once the bank evaluation says ready_to_claim. On 22 Nov it did not:
+# on card-length text it caught 13 of 17 AI-written lines (the bar is 0.8) and 5 of 17 rewrites, though it
+# flagged none of the 17 human lines. So it is left out, and visitors' words aren't sent to it at all.
+# HMD_PANGRAM_LIVE=1 turns it back on; even then it can only hold a card for a person, never reject one.
+PANGRAM_LIVE = os.environ.get("HMD_PANGRAM_LIVE") == "1"
 CONTACT = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+|https?://|www\.|(?<!\d)(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)"
                      r"|(?<!\w)@[a-z0-9_]{3,}", re.I)
 PROMPT = """You screen one handwritten card before it may be shown to a stranger.
@@ -87,6 +93,8 @@ def check(line, cmd=None):
     label = safety(line, cmd)
     if label != "ok":
         return {"hold": True, "reasons": [label], "safety": label, "ai": {"checked": False, "why": "held first"}}
+    if not PANGRAM_LIVE:
+        return {"hold": False, "reasons": [], "safety": label, "ai": {"checked": False, "why": "left out of the live decision"}}
     ai = ai_check(line)
     reasons = ["may be AI-written"] if ai.get("prediction") == "AI" else []
     return {"hold": bool(reasons), "reasons": reasons, "safety": label, "ai": ai}

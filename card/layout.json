@@ -1,0 +1,42 @@
+{
+ "camera": "iphone",
+ "card_mm": [
+  127,
+  76
+ ],
+ "corners": [
+  [
+   0,
+   0
+  ],
+  [
+   1,
+   0
+  ],
+  [
+   1,
+   1
+  ],
+  [
+   0,
+   1
+  ]
+ ],
+ "line": [
+  0,
+  0,
+  1,
+  1
+ ],
+ "name": null,
+ "tick": null,
+ "number": null,
+ "tick_ink_min": 0.05,
+ "require_tick": true,
+ "page": null,
+ "mode": "font",
+ "arm_traces": false,
+ "max_chars": 60,
+ "house_line": "PLACEHOLDER HOUSE LINE",
+ "deadline_s": 25
+}

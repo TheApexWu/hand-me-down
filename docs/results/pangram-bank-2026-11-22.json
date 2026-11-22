@@ -1,0 +1,420 @@
+{
+ "summary": {
+  "scored": 51,
+  "total": 51,
+  "human_flagged_as_ai": 0.0,
+  "ai_caught": 0.7647058823529411,
+  "rewrites_caught": 0.29411764705882354,
+  "ready_to_claim": false
+ },
+ "rows": [
+  {
+   "id": "h01",
+   "label": "human_public",
+   "kind": "feeling",
+   "words": 8,
+   "prediction": "Human",
+   "fraction_ai": 6.919744603458327e-23
+  },
+  {
+   "id": "h02",
+   "label": "human_public",
+   "kind": "feeling",
+   "words": 15,
+   "prediction": "Human",
+   "fraction_ai": 8.428452161562799e-20
+  },
+  {
+   "id": "h03",
+   "label": "human_public",
+   "kind": "feeling",
+   "words": 17,
+   "prediction": "Human",
+   "fraction_ai": 0.0
+  },
+  {
+   "id": "h04",
+   "label": "human_public",
+   "kind": "feeling",
+   "words": 13,
+   "prediction": "Human",
+   "fraction_ai": 0.0
+  },
+  {
+   "id": "h05",
+   "label": "human_public",
+   "kind": "feeling",
+   "words": 17,
+   "prediction": "Human",
+   "fraction_ai": 2.461188306576536e-29
+  },
+  {
+   "id": "h06",
+   "label": "human_public",
+   "kind": "feeling",
+   "words": 18,
+   "prediction": "Human",
+   "fraction_ai": 0.0
+  },
+  {
+   "id": "h07",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 15,
+   "prediction": "Human",
+   "fraction_ai": 4.473405861188436e-25
+  },
+  {
+   "id": "h08",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 9,
+   "prediction": "Human",
+   "fraction_ai": 2.2987413846333995e-20
+  },
+  {
+   "id": "h09",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 19,
+   "prediction": "Human",
+   "fraction_ai": 2.0792796476709328e-32
+  },
+  {
+   "id": "h10",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 16,
+   "prediction": "Human",
+   "fraction_ai": 1.39162979250149e-19
+  },
+  {
+   "id": "h11",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 18,
+   "prediction": "Human",
+   "fraction_ai": 5.08569238338604e-37
+  },
+  {
+   "id": "h12",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 10,
+   "prediction": "Human",
+   "fraction_ai": 2.6709474679176802e-14
+  },
+  {
+   "id": "h13",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 14,
+   "prediction": "Human",
+   "fraction_ai": 0.0
+  },
+  {
+   "id": "h14",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 11,
+   "prediction": "Human",
+   "fraction_ai": 5.602034619804162e-31
+  },
+  {
+   "id": "h15",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 12,
+   "prediction": "Human",
+   "fraction_ai": 3.171282685683437e-23
+  },
+  {
+   "id": "h16",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 8,
+   "prediction": "Human",
+   "fraction_ai": 2.786468951005923e-33
+  },
+  {
+   "id": "h17",
+   "label": "human_public",
+   "kind": "comfort",
+   "words": 12,
+   "prediction": "Human",
+   "fraction_ai": 4.640279820749465e-24
+  },
+  {
+   "id": "a01",
+   "label": "ai_generated",
+   "kind": "feeling",
+   "words": 16,
+   "prediction": "Human",
+   "fraction_ai": 0.000116730087029282
+  },
+  {
+   "id": "a02",
+   "label": "ai_generated",
+   "kind": "feeling",
+   "words": 14,
+   "prediction": "Human",
+   "fraction_ai": 2.385596997722672e-10
+  },
+  {
+   "id": "a03",
+   "label": "ai_generated",
+   "kind": "feeling",
+   "words": 14,
+   "prediction": "AI",
+   "fraction_ai": 0.9875137209892273
+  },
+  {
+   "id": "a04",
+   "label": "ai_generated",
+   "kind": "feeling",
+   "words": 15,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "a05",
+   "label": "ai_generated",
+   "kind": "feeling",
+   "words": 15,
+   "prediction": "AI",
+   "fraction_ai": 0.9999305605888367
+  },
+  {
+   "id": "a06",
+   "label": "ai_generated",
+   "kind": "feeling",
+   "words": 13,
+   "prediction": "AI",
+   "fraction_ai": 0.9999994039535522
+  },
+  {
+   "id": "a07",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 15,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "a08",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 11,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "a09",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 11,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "a10",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 10,
+   "prediction": "AI",
+   "fraction_ai": 0.8663468360900879
+  },
+  {
+   "id": "a11",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 12,
+   "prediction": "Human",
+   "fraction_ai": 2.797174371772413e-16
+  },
+  {
+   "id": "a12",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 14,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "a13",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 12,
+   "prediction": "Human",
+   "fraction_ai": 4.231255520278461e-23
+  },
+  {
+   "id": "a14",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 10,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "a15",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 11,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "a16",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 12,
+   "prediction": "AI",
+   "fraction_ai": 0.99998939037323
+  },
+  {
+   "id": "a17",
+   "label": "ai_generated",
+   "kind": "comfort",
+   "words": 10,
+   "prediction": "AI",
+   "fraction_ai": 0.8489073514938354
+  },
+  {
+   "id": "r01",
+   "label": "ai_rewritten",
+   "kind": "feeling",
+   "words": 12,
+   "prediction": "Human",
+   "fraction_ai": 6.724860846092124e-21
+  },
+  {
+   "id": "r02",
+   "label": "ai_rewritten",
+   "kind": "feeling",
+   "words": 14,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "r03",
+   "label": "ai_rewritten",
+   "kind": "feeling",
+   "words": 16,
+   "prediction": "Human",
+   "fraction_ai": 9.399618583398557e-17
+  },
+  {
+   "id": "r04",
+   "label": "ai_rewritten",
+   "kind": "feeling",
+   "words": 17,
+   "prediction": "Human",
+   "fraction_ai": 0.0
+  },
+  {
+   "id": "r05",
+   "label": "ai_rewritten",
+   "kind": "feeling",
+   "words": 14,
+   "prediction": "Human",
+   "fraction_ai": 6.184451649460243e-06
+  },
+  {
+   "id": "r06",
+   "label": "ai_rewritten",
+   "kind": "feeling",
+   "words": 18,
+   "prediction": "Human",
+   "fraction_ai": 4.486099749391623e-22
+  },
+  {
+   "id": "r07",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 19,
+   "prediction": "Human",
+   "fraction_ai": 5.676998042665471e-13
+  },
+  {
+   "id": "r08",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 8,
+   "prediction": "Human",
+   "fraction_ai": 1.1962587864733365e-10
+  },
+  {
+   "id": "r09",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 17,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "r10",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 18,
+   "prediction": "Human",
+   "fraction_ai": 2.1580254050346958e-23
+  },
+  {
+   "id": "r11",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 17,
+   "prediction": "Human",
+   "fraction_ai": 7.081226577332345e-11
+  },
+  {
+   "id": "r12",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 10,
+   "prediction": "Human",
+   "fraction_ai": 7.061663476193303e-10
+  },
+  {
+   "id": "r13",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 18,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  },
+  {
+   "id": "r14",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 12,
+   "prediction": "Human",
+   "fraction_ai": 2.120254313435026e-34
+  },
+  {
+   "id": "r15",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 12,
+   "prediction": "Human",
+   "fraction_ai": 3.4288071031697894e-19
+  },
+  {
+   "id": "r16",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 10,
+   "prediction": "AI",
+   "fraction_ai": 0.9999999403953552
+  },
+  {
+   "id": "r17",
+   "label": "ai_rewritten",
+   "kind": "comfort",
+   "words": 14,
+   "prediction": "AI",
+   "fraction_ai": 1.0
+  }
+ ]
+}
