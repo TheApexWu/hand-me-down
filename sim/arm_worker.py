@@ -51,6 +51,7 @@ ARMD_PEN_MM, FLOOR_MM = 68.0, 35.0
 LIFT_OFF_DEG = 25.0
 
 WRITING_AREA = np.array([[575, 520], [1165, 510], [1150, 680], [625, 682]], np.int32)   # as in arm_mcp.py
+CARD_GONE_PCT = 0.10    # % of the writing area: the same card measured 0.02, a faint pen card lifted off 0.36
 
 TYPOGRAPHY = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-",
               "…": "...", " ": " ", "~": "-"}
@@ -453,12 +454,34 @@ def write_refused(root, name, why):
     os.replace(tmp, done)
 
 
-def wait_clear(timeout, top=None):
-    """Hold a live job until the visitor's card and hand are off the blank card and the view is still."""
+def fine_detail(gray):
+    import cv2
+    g = gray.astype(np.float32)
+    return cv2.GaussianBlur(g, (0, 0), 1.2) - cv2.GaussianBlur(g, (0, 0), 18)
+
+
+def read_card_gone(read, now):
+    """True once the card that was read has left the box. Aligns first, so a nudged card still counts as there."""
+    import cv2
+    x0, y0, w, h = cv2.boundingRect(WRITING_AREA)
+    tpl, view = read[y0:y0 + h, x0:x0 + w], now[y0 - 14:y0 + h + 14, x0 - 14:x0 + w + 14]
+    _, _, best, _ = cv2.minMaxLoc(cv2.matchTemplate(view, tpl, cv2.TM_SQDIFF))
+    mask = np.zeros(tpl.shape, np.uint8)
+    cv2.fillPoly(mask, [WRITING_AREA - [x0, y0]], 255)
+    diff = np.abs(view[best[1]:best[1] + h, best[0]:best[0] + w] - tpl)
+    return 100 * float((diff[mask > 0] > 10).mean()) > CARD_GONE_PCT
+
+
+def wait_clear(timeout, top=None, read=None, keep=None):
+    """Hold a live job until the card that was read is gone, a blank card is down and the view is still."""
     import cv2
     top = Path(top or pg.ROOT / "state" / "cam" / "top.jpg")
+    base = cv2.imread(str(read), cv2.IMREAD_GRAYSCALE) if read else None
+    base = fine_detail(base) if base is not None else None
     prev, calm, seen, end = None, 0, 0.0, time.monotonic() + timeout
     while time.monotonic() < end:
+        if keep and not keep():
+            return False
         try:
             stamp = top.stat().st_mtime
         except OSError:
@@ -474,8 +497,9 @@ def wait_clear(timeout, top=None):
         blank = float(np.median(gray[mask > 0])) >= 150 and int(((gray < 75) & (mask > 0)).sum()) <= 200
         soft = cv2.GaussianBlur(gray, (9, 9), 0)
         still = prev is not None and float((cv2.absdiff(prev, soft)[470:720, 520:1220] > 25).mean()) < 0.01
-        calm = calm + 1 if blank and still else 0
         prev = soft
+        gone = base is None or base.shape != gray.shape or read_card_gone(base, fine_detail(gray))
+        calm = calm + 1 if blank and still and gone else 0
         if calm >= 3:
             return True
     return False
@@ -528,13 +552,21 @@ def handle(path, root, a, planner, seen):
         return
     if a.wait_clear:
         log(f"[{name}] waiting for a clear blank card")
-        if not wait_clear(a.wait_clear):
+        def current():
+            try:
+                return path.stat().st_mtime_ns == stamp and not (root / "done" / path.name).exists()
+            except FileNotFoundError:
+                return False
+        visitor = job.get("visitor_no")
+        read = root / "cards" / f"{visitor:03d}.jpg" if isinstance(visitor, int) else None
+        clear = wait_clear(a.wait_clear, read=read, keep=current)
+        if not current():
+            log(f"[{name}] skipped: job was withdrawn while waiting")
+            return
+        if not clear:
             log(f"[{name}] REFUSED: no clear blank card")
             seen[path.name] = stamp
-            write_refused(root, path.name, "no clear blank card on the box")
-            return
-        if not path.exists() or (root / "done" / path.name).exists():
-            log(f"[{name}] skipped: job was withdrawn while waiting")
+            write_refused(root, path.name, "no clear blank card on the box")   # card/jobs.py NOT_CLEAR
             return
     log(f"[{name}] writing")
     run_plan(root, path, plan)
