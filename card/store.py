@@ -125,13 +125,19 @@ def waiting(exclude=()):
 
 # run state (shared with the body server, the hook and the screen) ---------------
 
+def turn_dir():
+    # cache/turn/ is the one folder the Hermes container can write to: keep nothing else in it.
+    # HMD_TURN lets a dry run with its own data folder still talk to the live container, which
+    # only ever sees the repo's own cache/turn.
+    return Path(os.environ["HMD_TURN"]) if os.environ.get("HMD_TURN") else folder("cache/turn")
+
+
 def turn_file():
-    # cache/turn/ is the one folder the Hermes container can write to: keep nothing else in it
-    return folder("cache/turn") / "turn.json"
+    return turn_dir() / "turn.json"
 
 
 def pick_file():
-    return folder("cache/turn") / "pick.json"
+    return turn_dir() / "pick.json"
 
 
 def state():

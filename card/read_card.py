@@ -148,14 +148,20 @@ def fields(blocks, layout):
     return out
 
 
-def save_line_crop(card_img, bbox, dest, pad=0.35):
-    """Cut the line out of the card image. Returns the crop's rectangle as fractions of the card."""
+def save_line_crop(card_img, bbox, dest, pad=0.3, row_h=None):
+    """Cut the line out of the card image. Returns the crop's rectangle as fractions of the card.
+
+    The margin is a share of one written row's height (row_h, a fraction of the image), not of the
+    whole box: a line written over two rows has a tall box, and a margin sized from that takes in
+    the card's edge, its header rule and whatever lies on the table.
+    """
     img = cv2.imread(str(card_img))
     H, W = img.shape[:2]
     rect = [0.0, 0.0, 1.0, 1.0]
     if bbox:
         l, t, w, h = bbox
-        py, px = h * pad, h * pad * H / W
+        py = min(row_h or h, h) * pad
+        px = py * H / W
         x0, y0 = max(0, int((l - px) * W)), max(0, int((t - py) * H))
         x1, y1 = min(W, int((l + w + px) * W)), min(H, int((t + h + py) * H))
         if x1 - x0 > 8 and y1 - y0 > 8:
@@ -166,12 +172,14 @@ def save_line_crop(card_img, bbox, dest, pad=0.35):
 
 
 def clean_for_trace(bgr):
-    """The line as the arm's tracer should see it: grey, paper evened out, coloured rules dropped.
+    """The line as the arm's tracer should see it: grey, paper evened out, printed rules removed.
 
     The tracer splits ink from paper with one threshold for the whole crop, so a shadow across the
-    line, or a card's red rule in dim light, comes out as pen strokes. Dividing by the paper's own
-    brightness removes the shadow; taking the brightest of blue, green and red at each pixel makes a
-    coloured rule as pale as paper while black or pencil ink stays dark.
+    line, or an index card's blue and red rules, come out as pen strokes. Two things fix that:
+    dividing by the paper's own brightness removes the shadow, and a printed rule is told from ink
+    by its colour. Measured on real cards: paper and black ballpoint are nearly grey (the spread
+    between the colour channels is 3 to 11), the rules are strongly coloured (27 and up) and never
+    as dark as ink.
     """
     def flat(grey):
         size = min(121, max(41, int(grey.shape[0] * 0.45))) | 1          # wider than any stroke
@@ -180,17 +188,47 @@ def clean_for_trace(bgr):
         return np.clip(grey.astype(np.float32) / np.maximum(paper, 1) * 235, 0, 255).astype(np.uint8)
 
     dark = lambda img: float((img < 150).mean())
-    brightest, grey = flat(bgr.max(axis=2)), flat(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY))
+    brightest, dullest = bgr.max(axis=2), bgr.min(axis=2)
+    cleaned = flat(brightest)                                             # 235 is paper
+    rule = (brightest.astype(np.int16) - dullest > 20) & (cleaned > 155)  # coloured, and paler than ink
+    cleaned[cv2.dilate(rule.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0] = 235
+    grey = flat(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY))
     # Writing in coloured ink would vanish along with the rules: if most of the ink went, keep plain grey.
-    return brightest if dark(brightest) >= 0.5 * dark(grey) else grey
+    return cleaned if dark(cleaned) >= 0.5 * dark(grey) else grey
 
 
-def save_trace_crop(line_png, dest):
+def save_trace_crop(line_png, dest, keep=None, margin=0.0):
+    """Write the cleaned cut for the tracer.
+
+    keep: the words' boxes as fractions of this cut. Everything farther than margin (a fraction of
+    the cut's height) from every word is painted as paper, so the card's edge, its header rule or
+    something dark on the table at the rim of the cut can't be traced as writing.
+    """
     img = cv2.imread(str(line_png))
     if img is None:
         return None
-    cv2.imwrite(str(dest), clean_for_trace(img))
+    cleaned = clean_for_trace(img)
+    if keep:
+        H, W = cleaned.shape
+        m = int(margin * H)
+        near = np.zeros((H, W), bool)
+        for l, t, w, h in keep:
+            near[max(0, int(t * H) - m):int((t + h) * H) + m, max(0, int(l * W) - m):int((l + w) * W) + m] = True
+        cleaned[~near] = 235
+    cv2.imwrite(str(dest), cleaned)
     return dest
+
+
+def words_in_cut(card, row_h):
+    """The line's word boxes as fractions of its cut, and a margin of a quarter of a written row.
+
+    Empty if any word has no box: then nothing is masked, rather than risk painting over writing."""
+    rect, words = card.get("crop_rect"), card.get("words") or []
+    if not (rect and words and row_h and all(w.get("box") for w in words)):
+        return {}
+    keep = [[(b[0] - rect[0]) / rect[2], (b[1] - rect[1]) / rect[3], b[2] / rect[2], b[3] / rect[3]]
+            for b in (w["box"] for w in words)]
+    return {"keep": keep, "margin": 0.25 * row_h / rect[3]}
 
 
 def read(card, layout=None, call=None):
@@ -208,9 +246,12 @@ def read(card, layout=None, call=None):
         card["read_error"] = f"{type(exc).__name__}: {exc}"[:160]
     card["ok_to_show"] = lay.tick_is_marked(cv2.imread(str(img_path)), layout)
     card["may_show"] = lay.may_show(card["ok_to_show"], layout)  # decided once, here, from the paper
-    card["crop_rect"] = save_line_crop(img_path, card.get("bbox"), store.line_file(card["card_no"]))
+    heights = sorted(w["box"][3] for w in card.get("words") or [] if w.get("box"))
+    row_h = heights[len(heights) // 2] if heights else None              # one written row's height
+    card["crop_rect"] = save_line_crop(img_path, card.get("bbox"), store.line_file(card["card_no"]), row_h=row_h)
     card["crop"] = store.rel(store.line_file(card["card_no"]))
-    trace = save_trace_crop(store.line_file(card["card_no"]), store.trace_file(card["card_no"]))
+    trace = save_trace_crop(store.line_file(card["card_no"]), store.trace_file(card["card_no"]),
+                            **words_in_cut(card, row_h))
     card["trace_img"] = store.rel(trace) if trace else None   # what the arm traces; the screen shows crop
     return store.save_card(card)
 
