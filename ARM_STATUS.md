@@ -29,6 +29,7 @@ Updated Sun 22 Nov 2026, 12:25. Arm code is on `alex/arm-pen`. The arm stays on 
 4. Add `REDUCTO_API_KEY` to the card laptop's `.env` and run the read test on real index cards.
 5. Expect about 85-95 s per two- or three-line card at the current speed.
 6. Start `python -m card serve --lan` and send Alex the printed `arm_sync` line.
+7. Keep `require_tick` true for visitors. With no tick area set, every card counts as not OK to show and the rail stays empty. Draw a small "OK to show" box at the top right of each blank card, above the red line, then mark it with `python -m card layout`. Starting guess: `[0.86, 0.04, 0.08, 0.13]`.
 
 ## Arm laptop start order
 
