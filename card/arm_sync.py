@@ -22,6 +22,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+print = functools.partial(print, flush=True)  # a person is watching this log, often through a pipe
 IMAGE_PATH = re.compile(r"cards/\d{3}[\w.-]*\.(png|jpg)")  # the only paths a job may make us write
 
 
@@ -99,9 +100,6 @@ def sync_once(base, root, token, have, sent, log=print):
             problems += 1
             log(f"done {done.stem}: {type(exc).__name__}: {exc}; will retry")
     return problems
-
-
-print = functools.partial(print, flush=True)  # a person is watching this log, often through a pipe
 
 
 def main():

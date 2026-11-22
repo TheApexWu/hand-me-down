@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+print = functools.partial(print, flush=True)  # a person is watching this log, often through a pipe
 
 
 def run_once(root, seconds, log=print, sleep=time.sleep):
@@ -42,9 +43,6 @@ def run_once(root, seconds, log=print, sleep=time.sleep):
         delivered.append(job_file.stem)
         log(f"job {job_file.stem}: done")
     return delivered
-
-
-print = functools.partial(print, flush=True)  # a person is watching this log, often through a pipe
 
 
 def main():
