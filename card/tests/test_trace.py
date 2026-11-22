@@ -63,13 +63,15 @@ def test_a_missing_tracer_means_font_not_a_crash(tmp_path):
 
 # --- what the tracer's own gate lets through: shadows and ruled lines -------------------------------
 
-def line_crop(tmp_path, name, ink=(25, 25, 25), red_rule=False, black_rule=False, shadow=None):
+def line_crop(tmp_path, name, ink=(25, 25, 25), red_rule=False, black_rule=False, shadow=None, edge=False):
     """A cut-out line of 'handwriting' as the camera might see it."""
     img = np.full((170, 1100, 3), 236, np.uint8)
     if red_rule:
         cv2.line(img, (0, 46), (1100, 52), (95, 95, 225), 3)             # an index card's red header rule
     if black_rule:
-        cv2.line(img, (0, 150), (1100, 150), (30, 30, 30), 3)            # a pencil line, or the table's edge
+        cv2.line(img, (90, 150), (1010, 150), (30, 30, 30), 3)           # a pencil line under the words
+    if edge:
+        cv2.line(img, (0, 162), (1100, 158), (30, 30, 30), 5)            # the table's edge, right across the cut
     cv2.putText(img, "keeps the porch light on", (60, 115), cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, 1.9, ink, 3, cv2.LINE_AA)
     if shadow:
         img[:, 550:] = (img[:, 550:] * shadow).astype(np.uint8)          # a hard shadow over the right half
@@ -99,10 +101,16 @@ def test_a_coloured_rule_in_dim_light_is_cleaned_away(tmp_path):
     assert ok and info["longest_level_mm"] < 6 and info["band_share"] < 0.1
 
 
-def test_a_black_line_through_the_crop_falls_back_to_the_font(tmp_path):
-    raw = line_crop(tmp_path, "edge", black_rule=True)
-    ok, info = traces_cleanly(cleaned(tmp_path, raw))                     # cleaning can't remove a line with no colour
+def test_a_black_line_under_the_words_falls_back_to_the_font(tmp_path):
+    raw = line_crop(tmp_path, "pencil", black_rule=True)
+    ok, info = traces_cleanly(cleaned(tmp_path, raw))                     # no colour, so cleaning can't tell it from ink
     assert ok is False and info["gate"] is True and "line" in info["reason"]
+
+
+def test_a_dark_edge_right_across_the_cut_is_cleaned_away(tmp_path):
+    raw = line_crop(tmp_path, "table", edge=True)
+    ok, info = traces_cleanly(cleaned(tmp_path, raw))
+    assert ok and info["longest_level_mm"] < 6
 
 
 def test_coloured_ink_survives_the_cleaning(tmp_path):

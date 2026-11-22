@@ -162,8 +162,8 @@ def save_line_crop(card_img, bbox, dest, pad=0.3, row_h=None):
         l, t, w, h = bbox
         py = min(row_h or h, h) * pad
         # Wider at the sides: on real cards Reducto's box for a word can stop short of its last
-        # letters (it ended a third of the way through "nostra"), and a clipped word looks wrong.
-        px = min(row_h or h, h) * 1.2 * H / W
+        # letters (it ended two letters before the end of "nostra"), and a clipped word looks wrong.
+        px = min(row_h or h, h) * 2.0 * H / W
         x0, y0 = max(0, int((l - px) * W)), max(0, int((t - py) * H))
         x1, y1 = min(W, int((l + w + px) * W)), min(H, int((t + h + py) * H))
         if x1 - x0 > 8 and y1 - y0 > 8:
@@ -180,8 +180,8 @@ def clean_for_trace(bgr):
     line, or an index card's blue and red rules, come out as pen strokes. Two things fix that:
     dividing by the paper's own brightness removes the shadow, and a printed rule is told from ink
     by its colour. Measured on real cards: paper and black ballpoint are nearly grey (the spread
-    between the colour channels is 3 to 11), the rules are strongly coloured (27 and up) and never
-    as dark as ink.
+    between the colour channels is 3 to 11), the rules are strongly coloured (27 and up, about 50
+    in the middle of a line) and never as dark as ink.
     """
     def flat(grey):
         size = min(121, max(41, int(grey.shape[0] * 0.45))) | 1          # wider than any stroke
@@ -192,11 +192,16 @@ def clean_for_trace(bgr):
     dark = lambda img: float((img < 150).mean())
     brightest, dullest = bgr.max(axis=2), bgr.min(axis=2)
     cleaned = flat(brightest)                                             # 235 is paper
-    rule = (brightest.astype(np.int16) - dullest > 20) & (cleaned > 155)  # coloured, and paler than ink
+    # Coloured (spread over 25) and not as dark as ink (over 120 after evening out). On some cards the
+    # rules photograph as dark as 135; black ink stays under 120, even where it crosses a rule.
+    rule = (brightest.astype(np.int16) - dullest > 25) & (cleaned > 120)
     cleaned[cv2.dilate(rule.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0] = 235
     grey = flat(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY))
-    # Writing in coloured ink would vanish along with the rules: if most of the ink went, keep plain grey.
-    return cleaned if dark(cleaned) >= 0.5 * dark(grey) else grey
+    # Writing in coloured ink would vanish along with the rules. Only then (almost no dark left at all)
+    # keep plain grey. Comparing with the grey version's dark share is wrong on its own: on cards whose
+    # rules photograph dark, the rules are most of what is dark, and removing them is the point.
+    left, before = dark(cleaned), dark(grey)
+    return cleaned if left >= 0.01 or left >= 0.15 * before else grey
 
 
 def save_trace_crop(line_png, dest, keep=None, margin=0.0, side=None):
@@ -210,15 +215,10 @@ def save_trace_crop(line_png, dest, keep=None, margin=0.0, side=None):
     img = cv2.imread(str(line_png))
     if img is None:
         return None
-    cleaned = clean_for_trace(img)
-    if keep:
-        H, W = cleaned.shape
-        m, sx = int(margin * H), int((side if side is not None else margin) * H)
-        near = np.zeros((H, W), bool)
-        for l, t, w, h in keep:
-            near[max(0, int(t * H) - m):int((t + h) * H) + m, max(0, int(l * W) - sx):int((l + w) * W) + sx] = True
-        cleaned[~near] = 235
-    cv2.imwrite(str(dest), cleaned)
+    # The same ink the screen shows (rules, card edge, table and paper all taken out), drawn back
+    # as dark ink on even paper: the cleanest thing to hand the tracer's one-threshold split.
+    a = ink_alpha(img, keep=keep, margin=margin, side=side)
+    cv2.imwrite(str(dest), (235 - 195 * a).astype(np.uint8))
     return dest
 
 
@@ -231,7 +231,94 @@ def words_in_cut(card, row_h):
         return {}
     keep = [[(b[0] - rect[0]) / rect[2], (b[1] - rect[1]) / rect[3], b[2] / rect[2], b[3] / rect[3]]
             for b in (w["box"] for w in words)]
-    return {"keep": keep, "margin": 0.25 * row_h / rect[3], "side": 1.0 * row_h / rect[3]}
+    return {"keep": keep, "margin": 0.25 * row_h / rect[3], "side": 2.0 * row_h / rect[3]}
+
+
+INK_BGR = (24, 27, 29)   # the screen's ink colour, #1d1b18
+
+
+def ink_alpha(bgr, keep=None, margin=0.0, side=None):
+    """How much ink each pixel holds (0 to 1), with the paper, the printed rules, the card's edge and
+    the table taken out: the handwriting alone, ready to sit on the screen's own paper."""
+    grey = clean_for_trace(bgr).astype(np.float32)                       # 235 is paper
+    H, W = grey.shape
+    if keep:
+        m, sx = int(margin * H), int((side if side is not None else margin) * H)
+        near = np.zeros((H, W), bool)
+        for l, t, w, h in keep:
+            near[max(0, int(t * H) - m):int((t + h) * H) + m, max(0, int(l * W) - sx):int((l + w) * W) + sx] = True
+        grey[~near] = 235
+    # Ink after cleaning is 60-130; what is left of a printed rule sits at 180-215. Start the ramp
+    # below the rules, so only pen ink shows.
+    a = np.clip((175 - grey) / 85, 0, 1)
+    a[a < 0.06] = 0
+    solid = (a > 0.3).astype(np.uint8)
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(solid, 8)
+    if n > 1:
+        dist = cv2.distanceTransform(solid, cv2.DIST_L2, 3)
+        stroke = float(np.percentile(dist[solid > 0], 75))                # half a pen stroke, give or take
+        widest = np.zeros(n, np.float32)
+        np.maximum.at(widest, lab.ravel(), dist.ravel())
+        x, w = stats[:, cv2.CC_STAT_LEFT], stats[:, cv2.CC_STAT_WIDTH]
+        at_side = (x <= 1) | (x + w >= W - 1)                             # the card's edge or the table, at the rim
+        # a pen line is thin: anything much fatter is the card's edge, the table or a shadow
+        keep_label = (widest <= 3 * stroke + 2) & (stats[:, cv2.CC_STAT_AREA] >= 10) & ~at_side
+        keep_label[0] = False
+        kept = cv2.dilate(keep_label[lab].astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+        a = np.where(kept, a, 0)
+    return np.maximum(a, cv2.dilate(a, np.ones((2, 2), np.uint8)) * 0.85)   # a touch bolder, for reading across a room
+
+
+def save_ink(card, row_h=None):
+    """cards/NNN_ink.png: the line's handwriting as ink on a transparent ground, for the visitor screen.
+
+    Sets card["ink"], card["ink_rect"] (where it sits on the card, as fractions) and card["ink_size"]."""
+    crop = cv2.imread(str(store.line_file(card["card_no"])))
+    if crop is None or not card.get("crop_rect"):
+        return None
+    if row_h is None:
+        heights = sorted(w["box"][3] for w in card.get("words") or [] if w.get("box"))
+        row_h = heights[len(heights) // 2] if heights else None
+    a = ink_alpha(crop, **words_in_cut(card, row_h))
+    ys, xs = np.nonzero(a > 0.2)
+    if not len(xs):
+        return None
+    H, W = a.shape
+    pad = max(6, int(0.02 * H))
+    y0, y1, x0, x1 = max(0, ys.min() - pad), min(H, ys.max() + pad + 1), max(0, xs.min() - pad), min(W, xs.max() + pad + 1)
+    out = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
+    out[..., :3] = INK_BGR
+    out[..., 3] = (a[y0:y1, x0:x1] * 255).astype(np.uint8)
+    dest = store.folder("cards") / f"{store.nnn(card['card_no'])}_ink.png"
+    cv2.imwrite(str(dest), out)
+    l, t, w, h = card["crop_rect"]
+    card["ink"] = store.rel(dest)
+    card["ink_rect"] = [round(l + w * x0 / W, 5), round(t + h * y0 / H, 5),
+                        round(w * (x1 - x0) / W, 5), round(h * (y1 - y0) / H, 5)]
+    card["ink_size"] = [int(x1 - x0), int(y1 - y0)]
+    return dest
+
+
+def ink_from_photo(photo, dest):
+    """Handwriting from a photo with no Reducto read (the team's invitation, the house line): the whole
+    photo, cleaned the same way, as ink on a transparent ground."""
+    img = cv2.imread(str(photo))
+    if img is None:
+        raise ValueError(f"not an image: {photo}")
+    if img.shape[1] > 2000:
+        img = cv2.resize(img, (2000, round(img.shape[0] * 2000 / img.shape[1])), interpolation=cv2.INTER_AREA)
+    a = ink_alpha(img)
+    ys, xs = np.nonzero(a > 0.2)
+    if not len(xs):
+        raise ValueError("no handwriting found in that photo")
+    pad = 12
+    y0, y1 = max(0, ys.min() - pad), min(a.shape[0], ys.max() + pad + 1)
+    x0, x1 = max(0, xs.min() - pad), min(a.shape[1], xs.max() + pad + 1)
+    out = np.zeros((y1 - y0, x1 - x0, 4), np.uint8)
+    out[..., :3] = INK_BGR
+    out[..., 3] = (a[y0:y1, x0:x1] * 255).astype(np.uint8)
+    cv2.imwrite(str(dest), out)
+    return dest
 
 
 def read(card, layout=None, call=None):
@@ -256,6 +343,10 @@ def read(card, layout=None, call=None):
     card["crop"] = store.rel(store.line_file(card["card_no"]))
     trace = save_trace_crop(store.line_file(card["card_no"]), store.trace_file(card["card_no"]),
                             **words_in_cut(card, row_h))
+    try:
+        save_ink(card, row_h)
+    except Exception as exc:          # the screen falls back to the photo cut; the visit goes on
+        card["ink_error"] = f"{type(exc).__name__}: {exc}"[:160]
     card["trace_img"] = store.rel(trace) if trace else None   # what the arm traces; the screen shows crop
     return store.save_card(card)
 
