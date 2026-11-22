@@ -1,6 +1,6 @@
 # Arm Status
 
-Updated Sun 22 Nov 2026, 12:54. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
+Updated Sun 22 Nov 2026, 13:07. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
 
 ## Working
 
@@ -14,9 +14,15 @@ Updated Sun 22 Nov 2026, 12:54. Arm code is on `alex/arm-pen`. The arm stays on 
   - replies reached the card server
   - the arm did not move
 
+## Simulation clip
+
+`docs/hand-me-down-sim-demo.mp4` replays the planned motion and is labeled SIMULATION. It does not show servo lag, shake or real ink, so it does not prove the physical arm writes this cleanly.
+
+For the arm-offline switch: `git show origin/alex/arm-pen:docs/hand-me-down-sim-demo.mp4 > screen/sim-demo.mp4`
+
 ## Not ready
 
-- Writing is not stable yet. The current speed, 16 mm/s, halved shake in an air test but has not been tested in ink.
+- Writing is not stable yet. One 18 mm word at 24 mm/s was legible on the real arm, with a broken "m". Longer lines are untested at this size.
 - `mode: "trace"` is not implemented on the arm. It falls back to font and writes `line`.
 - A job the arm refuses gets no `done` file, so the screen would keep waiting.
 - Pen height is one value for the whole card (first ink 49 mm, writing 46 mm). Moving the riser or pen means measuring it again.
@@ -27,7 +33,7 @@ Updated Sun 22 Nov 2026, 12:54. Arm code is on `alex/arm-pen`. The arm stays on 
 2. Have Alex and Carson write the real house line by hand. The arm refuses the placeholder.
 3. Reject lines over 60 characters before writing a job. In tests, 66-67 characters fit and 74-77 did not; the exact limit depends on the words.
 4. Add `REDUCTO_API_KEY` to the card laptop's `.env` and run the read test on real index cards.
-5. Expect about 85-95 s per two- or three-line card at the current speed.
+5. Expect about 35-125 s per card at the current speed, depending on length.
 6. Start `python -m card serve --lan` and send Alex the printed `arm_sync` line.
 7. Keep `require_tick` true for visitors. With no tick area set, every card counts as not OK to show and the rail stays empty. Draw a small "OK to show" box at the top right of each blank card, above the red line, then mark it with `python -m card layout`. Starting guess: `[0.86, 0.04, 0.08, 0.13]`.
 
