@@ -177,6 +177,7 @@ def read(card, layout=None, call=None):
     except Exception as exc:
         card["read_error"] = f"{type(exc).__name__}: {exc}"[:160]
     card["ok_to_show"] = lay.tick_is_marked(cv2.imread(str(img_path)), layout)
+    card["may_show"] = lay.may_show(card["ok_to_show"], layout)  # decided once, here, from the paper
     card["crop_rect"] = save_line_crop(img_path, card.get("bbox"), store.line_file(card["card_no"]))
     card["crop"] = store.rel(store.line_file(card["card_no"]))
     return store.save_card(card)

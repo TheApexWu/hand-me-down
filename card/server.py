@@ -56,8 +56,9 @@ def quote_marks(quote, stranger, visitor):
 
 
 class App:
-    def __init__(self, camera_spec=None, use_camera=True, image=None):
+    def __init__(self, camera_spec=None, use_camera=True, image=None, reducto_call=None):
         self.camera, self.camera_spec, self.use_camera = None, camera_spec, use_camera
+        self.reducto_call = reducto_call  # tests pass a stand-in; None means the real Reducto
         self.camera_error = None
         self.image = image  # a still to stand in for the camera (layout tool, testing)
         self.busy = threading.Lock()
@@ -111,13 +112,16 @@ class App:
                 raise RuntimeError(self.camera_error or "no camera")
             frame = cam.capture()  # the photo is taken before anything else moves
         store.set_state(stage="reading")
-        card = visit.ingest(frame=frame, file=file)
+        card = visit.ingest(frame=frame, file=file, call=self.reducto_call)
         if seed:
             visit.shelve(card)
             store.set_state(stage="idle")
             return
         self.visitor, self.job = card["card_no"], None
-        store.set_state(stage="confirm", visitor=self.img(card))
+        if card.get("may_show"):
+            store.set_state(stage="confirm", visitor=self.img(card))
+        else:  # not OK to show: nothing of this card goes on the screen, so there is nothing to confirm
+            self.choose(card)
 
     def confirm(self, yes):
         card = store.load_card(self.visitor) if self.visitor else None
@@ -128,6 +132,9 @@ class App:
             self.visitor = None
             store.set_state(stage="idle")
             return
+        self.choose(card)
+
+    def choose(self, card):
         store.set_state(stage="choosing", visitor=self.img(card))
         self.job = visit.give(card)
         visit.shelve(card)
@@ -149,13 +156,15 @@ class App:
         self.show_job(card)
 
     def img(self, card):
-        return card and card.get("crop") and "/" + card["crop"]
+        """The crop's URL for the screen, or None: a card that isn't OK to show never gets one."""
+        return (card and card.get("may_show") and card.get("crop") and "/" + card["crop"]) or None
 
     def show_job(self, visitor):
         job = self.job
         stranger = None if job.get("house") else store.load_card(job["card_no"])
         store.set_state(stage="writing", visitor=self.img(visitor), stranger=self.img(stranger),
-                        by=job["picked_by"], marks=quote_marks(job["quote"], stranger, visitor),
+                        by=job["picked_by"],
+                        marks=quote_marks(job["quote"], stranger, visitor if visitor.get("may_show") else None),
                         job=job["card_no"], started=time.time(), est_s=jobs.expected_seconds())
         self.record_start(f"job{store.nnn(job['card_no'])}")
 
@@ -193,6 +202,9 @@ class App:
 
     def status(self):
         def brief(c):
+            if not c.get("may_show"):  # private: not even the operator page shows its words
+                return {"no": c["card_no"], "line": "", "name": None, "ok": c.get("ok_to_show"), "private": True,
+                        "error": None, "corrected": False, "at": c.get("written_at")}
             return {"no": c["card_no"], "line": c.get("line", ""), "name": c.get("name"), "ok": c.get("ok_to_show"),
                     "error": c.get("read_error"), "corrected": c.get("corrected", False), "at": c.get("written_at")}
         cards = store.all_cards()
@@ -202,12 +214,12 @@ class App:
             "state": store.state(), "busy": self.busy.locked(), "error": self.error,
             "camera": self.image or (self.camera.name if self.camera else None),
             "camera_error": self.camera_error or (self.camera.error if self.camera else None),
-            "visitor": visitor and {**brief(visitor), "img": self.img(visitor), "source": visitor.get("read_source"),
-                                    "blocks": [b["text"] for b in visitor.get("blocks", [])]},
+            "visitor": visitor and {**brief(visitor), "img": self.img(visitor), "source": visitor.get("read_source")},
             "job": self.job, "done": self.job and jobs.done(self.job["card_no"]),
             "rail": [brief(c) for c in cards if c.get("status") == "waiting"],
             "unread": [brief(c) for c in cards if c.get("status") == "unread"],
             "given": sum(c.get("status") == "given" for c in cards),
+            "private": sum(c.get("status") == "private" for c in cards),
             "layout": layout, "layout_measured": lay.measured(layout),
             "recording": str(self.recorder.path.name) if self.recorder else None,
         }
@@ -259,6 +271,10 @@ def make_handler(app):
                 if path == f"/{shared}/index.json" and shared != "cards":
                     return self.send(sorted(p.stem for p in store.folder(shared).glob("[0-9]*.json")))
                 if path.startswith(f"/{shared}/") and name.endswith(ok):
+                    if shared == "cards":  # a card's pictures are served only if it is OK to show
+                        card = store.load_card(name[:3]) if name[:3].isdigit() else None
+                        if not (card and card.get("may_show")):
+                            return self.send({"error": "not found"}, code=404)
                     return self.send_file(store.folder(shared) / name)
             if not self.local():
                 return self.send({"error": "operator pages are local only"}, code=403)

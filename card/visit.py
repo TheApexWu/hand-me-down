@@ -22,14 +22,19 @@ def fix_line(card, text):
     card["line"] = text.strip()
     card["corrected"] = True
     card["read_error"] = None
-    if card["status"] == "unread":
+    if card["status"] == "unread" and card.get("may_show"):
         card["status"] = "waiting"
     return store.save_card(card)
 
 
 def shelve(card):
-    """Put a card on the rail, or mark it unread so someone types its line in later."""
-    card["status"] = "waiting" if card.get("line") else "unread"
+    """Put a card on the rail, or mark it unread so someone types its line in later.
+
+    A card whose "OK to show" box isn't ticked stays private: never on the rail, never given."""
+    if not card.get("may_show"):
+        card["status"] = "private"
+    else:
+        card["status"] = "waiting" if card.get("line") else "unread"
     return store.save_card(card)
 
 
@@ -43,6 +48,8 @@ def give(visitor, exclude=(), **kw):
     choice = pick.choose(visitor, exclude=exclude, **kw)
     if choice["card_no"]:
         stranger = store.load_card(choice["card_no"])
+        if not stranger.get("may_show"):
+            raise PermissionError(f"card {store.nnn(stranger['card_no'])} is not OK to show; it cannot be given")
         stranger.update(status="given", given_to=visitor["card_no"], given_at=time.time())
         store.save_card(stranger)
     job = jobs.write(choice, visitor)

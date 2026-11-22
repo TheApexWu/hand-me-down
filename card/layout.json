@@ -32,6 +32,7 @@
  "tick": null,
  "number": null,
  "tick_ink_min": 0.05,
+ "require_tick": true,
  "page": null,
  "mode": "font",
  "house_line": "PLACEHOLDER HOUSE LINE",

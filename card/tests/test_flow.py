@@ -5,8 +5,7 @@ import sys
 import time
 
 from card import jobs, pick, read_card, store, visit
-from card import layout as lay
-from card.tests.conftest import reducto_says, response
+from card.tests.conftest import reducto_says, response, set_layout
 
 # A stand-in for Hermes: calls the same give() the MCP tool runs, with arguments from argv.
 FAKE = f"{sys.executable} -c \"import sys,json; from card.body_server import give; [print(give(c,q)) for c,q in json.loads(sys.argv[1])]\" "
@@ -52,7 +51,7 @@ def test_two_bad_quotes_fall_back_to_the_longest_waiting_card(card_photo):
 
 def test_late_model_falls_back_and_cannot_give_afterwards(card_photo):
     seed(card_photo, "one two three", "four five six")
-    lay.save({"deadline_s": 0.6})
+    set_layout(deadline_s=0.6)
     t = time.time()
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("anything"), cmd="sleep 30 #", is_online=True)
     assert job["picked_by"] == "rule" and job["card_no"] == 1 and time.time() - t < 5
@@ -75,7 +74,7 @@ def test_network_off_still_makes_a_job_marked_offline(card_photo):
 
 
 def test_network_off_and_nothing_cached_gives_the_house_line(card_photo):
-    lay.save({"house_line": "TEAM WRITES THIS", "mode": "trace"})
+    set_layout(house_line="TEAM WRITES THIS", mode="trace")
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says(None), is_online=False)
     assert job["picked_by"] == "offline" and job["line"] == "TEAM WRITES THIS" and job["card_no"] == 900
     assert job["mode"] == "font" and job["crop"] is None and (store.BASE / "jobs" / "900.json").exists()
@@ -95,8 +94,8 @@ def test_reads_and_picks_replay_from_cache_with_the_network_off(card_photo):
 
 
 def test_words_go_to_fields_by_position(card_photo):
-    lay.save({"corners": [[0.1875, 0.2222], [0.8125, 0.2222], [0.8125, 0.7778], [0.1875, 0.7778]],
-              "line": [0.05, 0.2, 0.9, 0.35], "name": [0.4, 0.65, 0.55, 0.25], "tick": [0.05, 0.7, 0.08, 0.14]})
+    set_layout(corners=[[0.1875, 0.2222], [0.8125, 0.2222], [0.8125, 0.7778], [0.1875, 0.7778]],
+               line=[0.05, 0.2, 0.9, 0.35], name=[0.4, 0.65, 0.55, 0.25], tick=[0.05, 0.7, 0.08, 0.14])
 
     def call(image):
         r = response("FOR SOMEONE WHO", top=0.06)

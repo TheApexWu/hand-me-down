@@ -82,6 +82,8 @@ def cmd_doctor(_):
     layout = lay.load()
     ok(lay.measured(layout), "card/layout.json measured (python -m card layout)")
     ok(layout["house_line"] != lay.DEFAULT["house_line"], 'house line written by the team ("house_line" in card/layout.json)')
+    ok(bool(layout.get("tick")) or not layout["require_tick"],
+       'tick box area set in the layout (without it every card counts as not OK to show)')
     ok(bool(os.environ.get("OPENROUTER_API_KEY")), "OPENROUTER_API_KEY in the environment")
     if pick.HERMES_CMD:
         ok(bool(shutil.which(pick.HERMES_CMD.split()[0])), f"chooser command (HMD_HERMES_CMD): {pick.HERMES_CMD}")

@@ -85,21 +85,21 @@
     $('cam').textContent = st.camera ? '· ' + st.camera : '';
     $('busy').textContent = st.busy ? 'working… (' + s.stage + ')' : s.stage;
     $('error').textContent = [st.error, st.camera_error].filter(Boolean).join(' · ');
-    $('notes').textContent = [st.layout_measured ? '' : 'layout.json is not measured yet: the whole frame is treated as the card', L.house_line === 'PLACEHOLDER HOUSE LINE' ? 'house line is still the placeholder' : ''].filter(Boolean).join(' · ');
+    $('notes').textContent = [st.layout_measured ? '' : 'layout.json is not measured yet: the whole frame is treated as the card', L.house_line === 'PLACEHOLDER HOUSE LINE' ? 'house line is still the placeholder' : '', L.require_tick && !L.tick ? 'no tick box in the layout: every card is treated as not OK to show' : '', L.require_tick ? '' : 'require_tick is off: every card is shown without a tick'].filter(Boolean).join(' · ');
     $('b-visit').disabled = $('b-seed').disabled = st.busy || s.stage === 'confirm';
     $('b-yes').disabled = $('b-no').disabled = st.busy || s.stage !== 'confirm';
     $('b-another').disabled = st.busy || !j || !!st.done;
     $('b-rec').className = st.recording ? 'on' : ''; $('b-rec').firstChild.textContent = st.recording ? 'Stop recording' : 'Record run';
     $('b-font').className = L.mode === 'font' ? 'main' : ''; $('b-trace').className = L.mode === 'trace' ? 'main' : '';
     $('overlay').innerHTML = (st.layout_measured ? poly(L.corners, '#7fd1a0') : '') + poly(L.page, '#6aa9ff');
-    $('counts').textContent = `· ${st.rail.length} waiting · ${st.given} given`;
+    $('counts').textContent = `· ${st.rail.length} waiting · ${st.given} given · ${st.private} kept private`;
     $('rail').innerHTML = st.rail.map(c => `<li><span class="dim mono">${nnn(c.no)} ${c.at || ''}</span> ${esc(c.line)}${c.name ? ` <span class="dim">· ${esc(c.name)}</span>` : ''}${c.ok === true ? ' <span class="go">☑</span>' : ''}${c.corrected ? ' <span class="warn">(corrected)</span>' : ''}</li>`).join('') || '<li class="dim">empty: seed it before the first visitor, or they get the house line</li>';
     $('unread-wrap').hidden = !st.unread.length;
     if (document.activeElement?.dataset.card === undefined)
       $('unread').innerHTML = st.unread.map(c => `<li><span class="mono">${nnn(c.no)}</span> <span class="dim">${esc(c.error)}</span><div class="row"><input type="text" data-card="${c.no}" placeholder="what it says"><button data-save="${c.no}">Save</button></div></li>`).join('');
     $('vid').textContent = vis ? '· card ' + nnn(vis.no) : '';
-    $('vtext').textContent = vis ? (vis.line || vis.error || 'reading…') : 'no card yet';
-    $('vtext').className = 'big ' + (vis ? (vis.line ? '' : 'bad') : 'dim');
+    $('vtext').textContent = vis ? (vis.private ? 'kept private: “OK to show” is not ticked' : vis.line || vis.error || 'reading…') : 'no card yet';
+    $('vtext').className = 'big ' + (vis ? (vis.private ? 'warn' : vis.line ? '' : 'bad') : 'dim');
     setImg($('vcrop'), vis && vis.img, v);
     $('vmeta').textContent = vis ? [vis.source && 'read via ' + vis.source, vis.name && 'from ' + vis.name, vis.ok === true ? 'OK to show: ticked' : vis.ok === false ? 'OK to show: not ticked' : '', vis.error && vis.line ? vis.error : ''].filter(Boolean).join(' · ') : '';
     $('pick').textContent = j ? `· jobs/${nnn(j.card_no)}.json · ${j.picked_by} · ${j.mode} · ${j.pick_secs}s` + (st.done ? ' · delivered' : ' · waiting for the arm') : '';

@@ -25,6 +25,9 @@ DEFAULT = {
     "tick": None,
     "number": None,
     "tick_ink_min": 0.05,
+    # Only a card whose "OK to show" box is ticked goes on the rail, is picked, is written or is put
+    # on a screen. Set false only as a deliberate choice, for cards that have no such box.
+    "require_tick": True,
     "page": None,
     "mode": "font",
     "house_line": "PLACEHOLDER HOUSE LINE",
@@ -69,6 +72,13 @@ def inside(box, area):
         return False
     cx, cy = box[0] + box[2] / 2, box[1] + box[3] / 2
     return area[0] <= cx <= area[0] + area[2] and area[1] <= cy <= area[1] + area[3]
+
+
+def may_show(ok_to_show, layout):
+    """The one rule for showing a card to anyone: its "OK to show" box is ticked.
+
+    A card whose tick can't be judged (no tick area in the layout) counts as not ticked."""
+    return ok_to_show is True or not layout.get("require_tick", True)
 
 
 def tick_is_marked(card_img, layout):

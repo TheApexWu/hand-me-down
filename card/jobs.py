@@ -29,6 +29,8 @@ def done_file(n):
 def write(pick, visitor, layout=None):
     layout = layout or lay.load()
     stranger = store.load_card(pick["card_no"]) if pick["card_no"] else None
+    if stranger and not stranger.get("may_show"):
+        raise PermissionError(f"card {store.nnn(stranger['card_no'])} is not OK to show; no job is written for it")
     if stranger:
         n = stranger["card_no"]
         can_trace = bool(stranger.get("crop") and stranger.get("bbox"))
