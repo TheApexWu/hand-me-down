@@ -246,6 +246,13 @@ class App:
         self.capture(file=file, show=True)
         if store.state().get("stage") != "confirm":
             return
+        card = store.load_card(self.visitor)
+        if not (card and (card.get("line") or "").strip()):    # no reply goes out for a card nobody could read
+            if card:
+                visit.discard(card)
+            self.visitor, self.error = None, "Couldn't read that card: lay it flat under the camera and press again"
+            store.set_state(stage="idle", unread=True)
+            return
         time.sleep(DEMO_HOLD_S)
         mine = self.visitor
         self.confirm(True)
