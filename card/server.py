@@ -59,6 +59,26 @@ def rows_in(card):
     return [[round(max(0.0, v), 4) for v in r["box"]] for r in rows]
 
 
+def quote_image(card, box):
+    """cards/NNN_quote.png: only the words the visitor receives, cut out of the stranger's ink.
+    box is the phrase's place on the card (fractions). Returns (url, [w, h]) or (None, None)."""
+    import cv2
+    rect = ink_rect(card)
+    img = cv2.imread(str(store.BASE / card["ink"]), cv2.IMREAD_UNCHANGED) if card.get("ink") else None
+    if img is None or not rect or not box:
+        return None, None
+    H, W = img.shape[:2]
+    l, t, w, h = to_crop(box, rect)
+    px, py = 0.04 * w + 0.01, 0.16 * h
+    x0, x1 = max(0, int((l - px) * W)), min(W, int((l + w + px) * W))
+    y0, y1 = max(0, int((t - py) * H)), min(H, int((t + h + py) * H))
+    if x1 - x0 < 8 or y1 - y0 < 8:
+        return None, None
+    dest = store.folder("cards") / f"{store.nnn(card['card_no'])}_quote.png"
+    cv2.imwrite(str(dest), img[y0:y1, x0:x1])
+    return "/" + store.rel(dest), [x1 - x0, y1 - y0]
+
+
 def image_size(path):
     import cv2
     img = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
@@ -183,7 +203,8 @@ class App:
             return
         self.visitor, self.job = card["card_no"], None
         if card.get("may_show"):
-            store.set_state(stage="confirm", **self.screen_card(card, "visitor"))
+            # the public screen never shows the visitor's own card: only that it was read, and how fast
+            store.set_state(stage="confirm", words=len(card.get("words") or []), read_secs=card.get("read_secs"))
         else:  # not OK to show: nothing of this card goes on the screen, so there is nothing to confirm
             self.choose(card)
 
@@ -203,13 +224,13 @@ class App:
         self.choose(card)
 
     def choose(self, card):
-        store.set_state(stage="choosing", **self.screen_card(card, "visitor"), candidates=self.candidates(card))
+        store.set_state(stage="choosing", candidates=self.candidates(card))
         try:
             self.job = visit.give(card)
         except jobs.NoJob as none:   # nothing the arm could write: say so to the operator, show only their line
             self.job, self.error = None, str(none)
             visit.shelve(card)
-            store.set_state(stage="card", **self.screen_card(card, "visitor"))
+            store.set_state(stage="card")
             return
         visit.shelve(card)
         self.show_job(card)
@@ -220,7 +241,7 @@ class App:
             return
         tried = set(card.get("got", []))
         visit.ungive(self.job)
-        store.set_state(stage="choosing", **self.screen_card(card, "visitor"))
+        store.set_state(stage="choosing", candidates=self.candidates(card))
         card["status"] = "new"  # keep the visitor's own card off the rail while choosing
         try:
             self.job = visit.give(card, exclude=tried)
@@ -281,15 +302,15 @@ class App:
     def show_job(self, visitor):
         job = self.job
         stranger = None if job.get("house") else store.load_card(job["card_no"])
-        theirs = self.screen_card(stranger, "stranger")
+        # Quote mode: the public screen shows only the words the visitor receives, in the stranger's
+        # own hand. Never the visitor's card, never the rest of the stranger's.
+        url, size = (quote_image(stranger, job.get("quote_box")) if stranger and stranger.get("may_show") else (None, None))
         if not stranger and HANDWRITING["house"].exists():   # the house line, in the team's own hand
-            theirs = {"stranger": "/house.png", "stranger_size": image_size(HANDWRITING["house"])}
-        store.set_state(stage="writing", **self.screen_card(visitor, "visitor"), **theirs,
-                        rows=rows_in(stranger) if stranger and stranger.get("ink") else None,
-                        by=job["picked_by"], quote=job.get("quote"), writes=job.get("line"), mode=job.get("mode"),
+            url, size = "/house.png", image_size(HANDWRITING["house"])
+        store.set_state(stage="writing", stranger=url, stranger_size=size,
+                        by=job["picked_by"], quote=job.get("quote"), mode=job.get("mode"),
                         misses=job.get("misses", 0), pick_secs=job.get("pick_secs"),
-                        marks=quote_marks(job["quote"], stranger, visitor if visitor and visitor.get("may_show") else None),
-                        job=job["card_no"], started=time.time(), est_s=jobs.expected_seconds())
+                        job=job["card_no"], house=bool(job.get("house")), started=time.time(), est_s=jobs.expected_seconds())
         self.record_start(f"job{store.nnn(job['card_no'])}")
 
     def watch_done(self):

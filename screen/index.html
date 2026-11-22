@@ -74,7 +74,7 @@
 
   /* reading: a blank card under a scanning beam */
   #scan { width: 42vw; left: 50%; top: 40%; display: none; overflow: hidden; z-index: 15; }
-  .stage-reading #scan { display: block; animation: rise .6s ease-out both; }
+  .stage-reading #scan, .stage-confirm #scan { display: block; animation: rise .6s ease-out both; }
   #scan::after { content: ""; position: absolute; left: 0; right: 0; height: 18%; top: -18%;
                  background: linear-gradient(to bottom, transparent, rgba(58, 109, 179, .16) 70%, rgba(58, 109, 179, .7) 98%, transparent);
                  animation: sweep 1.5s cubic-bezier(.5, 0, .5, 1) infinite; }
@@ -108,11 +108,16 @@
   .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ink); }
   .bar i::after { content: ""; position: absolute; right: -.5vh; top: -.5vh; width: 1.2vh; height: 1.2vh; border-radius: 50%; background: var(--mark); }
 
-  .choice { all: unset; position: absolute; top: 79vh; width: 7.4vh; height: 7.4vh; border: .3vh solid var(--ink); border-radius: 50%;
-            display: none; place-items: center; cursor: pointer; background: rgba(252, 250, 244, .7); z-index: 30; }
-  .stage-confirm .choice { display: grid; animation: fadein .6s 1.6s both; }
-  #no { left: calc(50% - 9vw); } #yes { left: calc(50% + 9vw - 7.4vh); }
-  .choice svg { width: 3.8vh; height: 3.8vh; stroke: var(--ink); stroke-width: 5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  /* the visitor's own card never shows here: it travels as a sealed envelope */
+  #env { position: absolute; width: 15vw; aspect-ratio: 127 / 76; transform: translate(-50%, -50%) rotate(-3deg); display: none; z-index: 18;
+         background:
+           linear-gradient(to bottom right, transparent calc(50% - .08vh), rgba(29, 27, 24, .22) 50%, transparent calc(50% + .08vh)) 0 0 / 50% 62% no-repeat,
+           linear-gradient(to bottom left, transparent calc(50% - .08vh), rgba(29, 27, 24, .22) 50%, transparent calc(50% + .08vh)) 100% 0 / 50% 62% no-repeat,
+           #efe6d4;
+         border-radius: .5vh; box-shadow: 0 .15vh .3vh rgba(70, 50, 30, .14), 0 1.2vh 2.4vh -.6vh rgba(70, 50, 30, .28); }
+  #env::after { content: ""; position: absolute; left: 50%; top: 62%; width: 3.4vh; height: 3.4vh; margin: -1.7vh 0 0 -1.7vh; border-radius: 50%;
+                background: radial-gradient(circle at 38% 35%, #d9634e, var(--mark) 60%, #8f2a1c); box-shadow: 0 .2vh .4vh rgba(90, 20, 10, .35); }
+  #env.shown { display: block; }
   @keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
 
   /* idle: the loose stack, and the team's own handwriting */
@@ -168,7 +173,7 @@
   <div class="card" id="scan"></div>
   <div id="cands"></div>
   <svg id="threads"></svg>
-  <div class="card main" id="mine"><div class="area"></div></div>
+  <div id="env"></div>
   <div class="card main" id="theirs"><div class="area"></div>
     <svg class="postmark" viewBox="0 0 150 150">
       <defs><filter id="inky"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="4"/><feDisplacementMap in="SourceGraphic" scale="3"/></filter></defs>
@@ -184,8 +189,6 @@
   </div>
   <div id="notes"><div class="line" id="l1"></div><div class="line" id="l2"></div><div class="line" id="l3"></div></div>
 </section>
-<button class="choice" id="no" aria-label="no"><svg viewBox="0 0 48 48"><path d="M11 11 L37 37 M37 11 L11 37"/></svg></button>
-<button class="choice" id="yes" aria-label="yes"><svg viewBox="0 0 48 48"><path d="M9 26 L20 37 L39 11"/></svg></button>
 
 <aside id="machine"><div class="frame"></div>
   <div class="mhead"><span id="mname"></span><span id="live"></span></div>
@@ -206,8 +209,9 @@
     steps: {read: 'READ', match: 'MATCH', write: 'WRITE', deliver: 'DELIVER'},
     waiting: n => `${n} WAITING`, delivered: n => `${n} DELIVERED`,
     reading: 'READING HANDWRITING', read: (n, s) => `READ  <b>${n}</b> WORDS${s != null ? `  <b>${s.toFixed(1)}</b> S` : ''}`,
-    comparing: n => `COMPARING WITH <b>${n}</b> CARDS`,
-    matched: 'MATCHED ON', checked: 'QUOTE FOUND ON CARD', picked: s => `PICKED IN <b>${s}</b> S`, rule: 'PICKED BY RULE',
+    checking: 'CHECKING THE READ', comparing: n => `COMPARING WITH <b>${n}</b> CARDS`,
+    received: 'YOU RECEIVE', checked: 'PHRASE FOUND ON CARD', picked: s => `PICKED IN <b>${s}</b> S`, rule: 'PICKED BY RULE',
+    house: 'FROM THE HOUSE',
     pen: 'PEN', delivered_at: (t, d) => `DELIVERED <b>${t}</b>  TOOK <b>${d}</b>`, returned: 'RETURNED TO THE STACK',
     phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
   };
@@ -217,7 +221,7 @@
   const desk = $('desk');
   const nnn = n => String(n).padStart(3, '0');
   const mmss = s => s == null ? '–' : Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
-  let cur = {stage: null}, seen = null, clockOffset = 0, theirs = null, mineCard = null, theirsKey = null, mineKey = null, candEls = [];
+  let cur = {stage: null}, seen = null, clockOffset = 0, theirs = null, theirsKey = null, candEls = [];
 
   /* ---------- static furniture ---------- */
   $('name').textContent = LABELS.name; $('mname').textContent = LABELS.machine;
@@ -332,18 +336,13 @@
   let threadMode = null;
   function drawThreads() {
     threads.innerHTML = '';
-    const mine = $('mine');
-    if (threadMode === 'seek' && mine.classList.contains('shown')) {
-      candEls.forEach(c => svgEl('path', {class: 'seek', d: curve(anchor(mine, .5, 1), anchor(c, .5, 0), -.05)}, threads));
+    const env = $('env');
+    if (threadMode === 'seek' && env.classList.contains('shown')) {
+      candEls.forEach(c => svgEl('path', {class: 'seek', d: curve(anchor(env, .5, 1), anchor(c, .5, 0), -.05)}, threads));
     }
-    if (threadMode === 'bond' && theirs && mine.classList.contains('shown') && $('theirs').classList.contains('shown')) {
-      const m = theirs.markEls[0];
-      if (m) {
-        const r = theirs.box.getBoundingClientRect(), d = D();
-        const target = [r.left - d.left + (m.m[0] + .02) * r.width, r.top - d.top + (m.m[1] + m.m[3]) * r.height];
-        const p = svgEl('path', {class: 'bond', d: curve(anchor(mine, .92, .75), target, .18), pathLength: 1}, threads);
-        if (m.p.classList.contains('on')) p.classList.add('on');
-      }
+    if (threadMode === 'bond' && theirs && env.classList.contains('shown') && $('theirs').classList.contains('shown')) {
+      const r = theirs.box.getBoundingClientRect(), d = D();
+      const p = svgEl('path', {class: 'bond on', d: curve(anchor(env, .92, .7), [r.left - d.left + .02 * r.width, r.top - d.top + .55 * r.height], .18), pathLength: 1}, threads);
     }
   }
 
@@ -384,7 +383,7 @@
   }
 
   function onState(prev, s) {
-    const was = prev.stage, now = s.stage, mine = $('mine'), theirsEl = $('theirs');
+    const was = prev.stage, now = s.stage, env = $('env'), theirsEl = $('theirs');
     document.body.className = 'stage-' + now + (s.sim ? ' sim-on' : '');
     steps(now);
     const clip = $('sim-video');
@@ -392,28 +391,19 @@
     if (!s.sim && !clip.paused) clip.pause();
     loadStack();
 
-    if (now === 'reading') {
-      place($('scan'), ...CENTER(), 0); clearNotes(); note('l1', LABELS.reading);
-      if (was !== 'reading' && !reduce) $('flash').animate([{opacity: 0}, {opacity: .7, offset: .15}, {opacity: 0}], {duration: 700});
-    }
+    // reading and confirm: the card is under the camera and then with the operator. The public
+    // screen never shows it, only that it was read and how long that took.
+    if (now === 'reading' || now === 'confirm') {
+      place($('scan'), ...CENTER(), 0); $('scan').style.display = 'block';
+      if (now === 'reading') { clearNotes(); note('l1', LABELS.reading); }
+      if (now === 'reading' && was !== 'reading' && !reduce) $('flash').animate([{opacity: 0}, {opacity: .7, offset: .15}, {opacity: 0}], {duration: 700});
+      if (now === 'confirm' && was !== 'confirm') { clearNotes(); note('l1', LABELS.read(s.words || 0, s.read_secs)); note('l2', LABELS.checking); }
+    } else $('scan').style.display = '';
 
-    // the visitor's card: read in front of them, then sent off to be matched
-    if (now === 'confirm') {
-      const key = s.visitor + ':' + s.v;
-      if (mineKey !== s.visitor) {
-        mineCard = fillCard(mine, s.visitor, s.visitor_size, {words: s.visitor_words}); mineKey = s.visitor;
-        mine.style.width = '42vw'; place(mine, ...CENTER(), -.8); mine.classList.add('shown');
-        play(mine, [{opacity: 0, transform: `translate(-50%, -53%) rotate(-2.6deg)`}, {opacity: 1, transform: T()}], 800, 'cubic-bezier(.2, .7, .2, 1)');
-        clearNotes();
-        const boxes = (mineCard && mineCard.boxEls) || [];
-        boxes.forEach(([r, t], i) => setTimeout(() => { r.classList.add('on'); t.classList.add('on'); }, reduce ? 0 : 700 + i * 140));
-        const after = reduce ? 0 : 900 + boxes.length * 140;
-        setTimeout(() => note('l1', LABELS.read((s.visitor_words || []).length, s.visitor_read_secs)), after);
-        if (s.visitor_line) typeOut('l2', s.visitor_line, after + 300);
-      }
-    }
+    // matching: the visitor's card, sealed, and the waiting cards it is compared with
     if (now === 'choosing' || now === 'card') {
-      if (mine.classList.contains('shown')) moveTo(mine, CORNER(), -3, '16vw', 1000);
+      place(env, ...CORNER(), -3);
+      if (!env.classList.contains('shown')) { env.classList.add('shown'); play(env, [{opacity: 0, transform: 'translate(-50%, -30%) rotate(-3deg) scale(.8)'}, {opacity: 1, transform: T()}], 700); }
       clearNotes();
       const cands = (s.candidates || []);
       $('cands').innerHTML = ''; candEls = [];
@@ -435,11 +425,12 @@
       if (now === 'card') threadMode = null;
     } else { clearInterval(window.lookTimer); }
 
-    // the stranger's card: lifted out of the cards compared, written row by row, stamped
+    // the words they receive: lifted out of the card they came from, written, stamped
     const key = s.job != null ? `${s.job}:${s.stranger}` : null;
     if (now === 'writing' || now === 'delivered') {
       if (theirsKey !== key) {
-        theirs = fillCard(theirsEl, s.stranger, s.stranger_size, {rows: s.rows, marks: (s.marks || {}).stranger, seed: (s.job || 3) * 7 + 3});
+        const whole = [[.04, .12, .96, .9]];                                   // the received phrase is one row
+        theirs = fillCard(theirsEl, s.stranger, s.stranger_size, {rows: whole, marks: s.house ? [] : [[.03, .1, .94, .72]], seed: (s.job || 3) * 7 + 3});
         theirsKey = key;
         theirsEl.querySelector('.postmark').classList.remove('landed');
         const from = candEls.find(c => +c.dataset.no === s.job);
@@ -450,13 +441,12 @@
           play(theirsEl, [{transform: `translate(calc(-50% + ${(a.left + a.width / 2) - (b.left + b.width / 2)}px), calc(-50% + ${(a.top + a.height / 2) - (b.top + b.height / 2)}px)) rotate(var(--r)) scale(${a.width / b.width})`}, {transform: T()}], 1000);
         } else if (was !== null && now === 'writing') play(theirsEl, [{opacity: 0, transform: `translate(-50%, -46%) rotate(var(--r))`}, {opacity: 1, transform: T()}], 800);
         candEls.forEach(c => c.classList.remove('on')); setTimeout(() => { $('cands').innerHTML = ''; candEls = []; }, 600);
-        if (mine.classList.contains('shown')) moveTo(mine, CORNER(), -3, '16vw', 600);
-        threadMode = 'bond';
+        if (env.classList.contains('shown')) { place(env, ...CORNER(), -3); threadMode = 'bond'; }
         clearNotes();
         if (s.quote) {
-          note('l1', `${LABELS.matched}<span class="typed done">“${s.quote}”</span>`);
-          note('l2', `<span class="ok">✓</span> ${LABELS.checked} <b>${nnn(s.job)}</b>${s.pick_secs != null ? `   ${LABELS.picked(s.pick_secs)}` : ''}`);
-        } else if (s.by && s.by !== 'hermes') note('l1', LABELS.rule);
+          note('l1', `${LABELS.received}<span class="typed done">“${s.quote}”</span>`);
+          note('l2', `<span class="ok">✓</span> ${LABELS.checked} <b>${nnn(s.job)}</b>${s.by === 'hermes' && s.pick_secs != null ? `   ${LABELS.picked(s.pick_secs)}` : s.by !== 'hermes' ? `   ${LABELS.rule}` : ''}`);
+        } else if (s.house) note('l1', LABELS.house);
         note('l3', `${LABELS.pen} <span class="bar"><i id="penbar"></i></span> <b id="pentime">0:00</b>`);
       }
       if (now === 'delivered') {
@@ -466,20 +456,16 @@
         note('l3', LABELS.delivered_at((String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || ['–'])[0], mmss(p.duration_s)));
         if (was === 'writing') stamp(theirsEl); else theirsEl.querySelector('.postmark').classList.add('landed');
       }
-    } else {
-      if (theirsEl.classList.contains('shown')) {
-        const done = () => { theirsEl.classList.remove('shown'); theirsKey = null; theirs = null; };
-        if (now === 'held') { note('l3', LABELS.returned); play(theirsEl, [{opacity: 1, transform: T()}, {opacity: 0, transform: `translate(-50%, -40%) rotate(var(--r)) scale(.6)`}], 900).then(done); }
-        else play(theirsEl, [{opacity: 1}, {opacity: 0}], 700).then(done);
-      }
-      if (['idle', 'reading'].includes(now)) {
-        if (mine.classList.contains('shown')) play(mine, [{opacity: 1}, {opacity: 0}], 500).then(() => mine.classList.remove('shown'));
-        mineKey = null; threadMode = null;
-        if (now === 'idle') clearNotes();
-      }
+    } else if (theirsEl.classList.contains('shown')) {
+      const done = () => { theirsEl.classList.remove('shown'); theirsKey = null; theirs = null; };
+      if (now === 'held') { note('l3', LABELS.returned); play(theirsEl, [{opacity: 1, transform: T()}, {opacity: 0, transform: `translate(-50%, -40%) rotate(var(--r)) scale(.6)`}], 900).then(done); }
+      else play(theirsEl, [{opacity: 1}, {opacity: 0}], 700).then(done);
     }
-    if (now !== 'confirm' && now !== 'choosing' && now !== 'card' && now !== 'writing' && now !== 'delivered' && now !== 'held') {
+    if (['idle', 'reading', 'confirm'].includes(now)) {
+      if (env.classList.contains('shown')) play(env, [{opacity: 1}, {opacity: 0}], 500).then(() => env.classList.remove('shown'));
+      threadMode = null;
       $('cands').innerHTML = ''; candEls = [];
+      if (now === 'idle') clearNotes();
     }
   }
 
@@ -527,9 +513,6 @@
     mountArm($('arm'), {sceneUrl: '/screen/arm/scene.json', meshBase: '/sim/so101/assets/', poseUrl: '/pose.json'});
   } catch (e) { console.error('arm panel', e); }
 
-  const answer = yes => fetch('/api/confirm', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({yes})});
-  $('yes').onclick = () => answer(true); $('no').onclick = () => answer(false);
-  document.addEventListener('keydown', e => { if (cur.stage === 'confirm') { if (e.key === 'y' || e.key === 'Enter') answer(true); if (e.key === 'n') answer(false); } });
   addEventListener('resize', () => layoutStack());
 
   loadStack(); tick(); pose(); requestAnimationFrame(frame);

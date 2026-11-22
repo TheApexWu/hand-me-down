@@ -64,7 +64,7 @@ def test_the_screen_shows_only_their_line_when_there_is_nothing_to_write(card_ph
     site.capture(card_photo("v", "v"), "the first visitor of the day")
     site.call("/api/confirm", body={"yes": True})
     state = wait_for("card", site)
-    assert state["visitor"].endswith("_ink.png") and "stranger" not in state
+    assert "stranger" not in state and not any(k.startswith("visitor") for k in state)
     status = json.loads(site.get("/api/status")[1])
     assert status["job"] is None and "house line" in status["error"]
 

@@ -25,19 +25,23 @@ def test_card_to_delivered_with_the_fake_arm(card_photo, site, monkeypatch):
 
     site.capture(card_photo("v", "v"), "waits up at night for the porch light")
     confirm = wait_for("confirm", site)
-    assert confirm["visitor"].endswith("_ink.png") and len(confirm["visitor_size"]) == 2
+    assert not any(k.startswith("visitor") for k in confirm)         # their own card never reaches the public screen
+    assert confirm["words"] > 0
 
     assert site.call("/api/confirm", body={"yes": True})[0] == 200
     writing = wait_for("writing", site)
-    assert writing["stranger"] == "/cards/001_ink.png" and writing["by"] == "hermes" and writing["job"] == 1
-    assert writing["rows"] and all(len(r) == 4 for r in writing["rows"])
-    assert len(writing["marks"]["stranger"]) == 1                    # the quoted words are boxed on their line
+    assert writing["stranger"] == "/cards/001_quote.png" and writing["by"] == "hermes" and writing["job"] == 1
+    assert writing["quote"] == "the porch light" and not any(k.startswith("visitor") for k in writing)
     assert writing["v"] > confirm["v"]
+    import cv2                                                       # only the received words, cut from their ink
+    quote = cv2.imread(str(store.BASE / "cards" / "001_quote.png"), cv2.IMREAD_UNCHANGED)
+    ink = cv2.imread(str(store.BASE / "cards" / "001_ink.png"), cv2.IMREAD_UNCHANGED)
+    assert quote.shape[2] == 4 and quote.shape[1] < ink.shape[1]
 
     assert fake_arm.run_once(store.BASE, seconds=0.2, log=lambda *_: None) == ["001"]
     delivered = wait_for("delivered", site)
     assert delivered["v"] > writing["v"]                             # the screen is told to redraw
-    assert delivered["stranger"] == writing["stranger"] and delivered["visitor"] == writing["visitor"]
+    assert delivered["stranger"] == writing["stranger"] and not any(k.startswith("visitor") for k in delivered)
     post = delivered["postmark"]
     assert len(post["delivered_at"]) == 5 and post["delivered_at"][2] == ":" and post["duration_s"] == 0
     assert len(post["written_at"]) == 5
@@ -49,7 +53,7 @@ def test_a_typed_test_line_goes_to_the_arm_and_comes_back_delivered(site):
     """For trying the arm before any real card can flow: the operator types the line."""
     assert site.call("/api/testjob", body={"text": "  hand   me down "})[0] == 200
     writing = wait_for("writing", site)
-    assert writing["job"] == 900 and writing["visitor"] is None and writing["stranger"] is None
+    assert writing["job"] == 900 and writing["stranger"] is None and writing["house"] is True
     job = store.read_json(store.BASE / "jobs" / "900.json")
     assert {k: job[k] for k in ("card_no", "line", "crop", "bbox", "quote", "picked_by", "mode")} == {
         "card_no": 900, "line": "hand me down", "crop": None, "bbox": None, "quote": None, "picked_by": "rule", "mode": "font"}

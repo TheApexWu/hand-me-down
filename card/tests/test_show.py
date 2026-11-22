@@ -96,8 +96,7 @@ def test_an_unticked_visitor_gets_a_gift_but_never_appears_on_the_screen(card_ph
     stages = [s["stage"] for s in states]
     assert "confirm" not in stages and stages[-1] == "writing"      # nothing of theirs to confirm on screen
     assert all(s.get("visitor") is None for s in states)             # their crop is never sent to the screen
-    assert states[-1]["stranger"] == f"/cards/{store.nnn(shown['card_no'])}_ink.png"
-    assert states[-1]["marks"]["visitor"] == []
+    assert states[-1]["stranger"] == f"/cards/{store.nnn(shown['card_no'])}_quote.png"
     assert SECRET not in json.dumps(states) and SECRET not in get("/state.json")[1].decode()
     assert store.load_card(visitor["card_no"])["status"] == "private"
     assert app.job["card_no"] == shown["card_no"] and app.job["picked_by"] == "hermes"

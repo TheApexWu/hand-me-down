@@ -40,7 +40,8 @@ def judge_give(turn, card, quote):
         if match:
             turn["closed"] = True
             return {"turn": turn["turn"], "card": cid, "quote": match, "by": "hermes"}, "given"
-        reason = f"that is not one of the phrases listed for card {cid}; give one of them exactly as listed"
+        listed = "; ".join(f'"{p}"' for p in allowed[:10])
+        reason = f"that is not one of the phrases listed for card {cid}. Give one of these exactly: {listed}"
     elif not quote_on_card(quote, allowed):
         reason = (f"those words are not on card {cid}; quote at least {MIN_WORDS} "
                   "consecutive words exactly as written on it")
