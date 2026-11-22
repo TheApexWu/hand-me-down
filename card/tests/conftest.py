@@ -25,7 +25,7 @@ def data(tmp_path, monkeypatch, request):
     monkeypatch.setattr(lay, "FILE", tmp_path / "layout.json")   # tests never touch the real layout
     # Most tests are about the flow, on cards with no tick box: say so the way a team would, in the layout.
     # test_show.py turns the tick back on.
-    lay.save({"require_tick": False})
+    lay.save({"require_tick": False, "house_line": "a line the two of us wrote by hand"})
     return tmp_path
 
 

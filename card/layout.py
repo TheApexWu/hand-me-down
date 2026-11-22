@@ -32,6 +32,8 @@ DEFAULT = {
     "require_tick": True,
     "page": None,
     "mode": "font",
+    "arm_traces": False,   # the arm can't trace yet: every job goes out as font until this is true
+    "max_chars": 60,       # longest line the arm is asked to write (66-67 fitted in its tests, 74-77 did not)
     "house_line": "PLACEHOLDER HOUSE LINE",
     "deadline_s": 25,
 }
@@ -86,8 +88,8 @@ def may_show(ok_to_show, layout):
 def tick_is_marked(card_img, layout):
     """Plain pixel count: is there ink inside the tick box? None if no tick area is set."""
     area = layout.get("tick")
-    if not area:
-        return None
+    if not area or layout["corners"] == DEFAULT["corners"]:
+        return None   # with the card not located, a tick area would be judging some other part of the frame
     gray = cv2.cvtColor(card_img, cv2.COLOR_BGR2GRAY)
     H, W = gray.shape
     l, t, w, h = area

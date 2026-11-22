@@ -62,7 +62,10 @@
     const key = pick('target');
     if (!L[key] || L[key].length >= 4) L[key] = [];
     L[key].push(at(e, $('frame')).map(r4));
-    if (key === 'corners' && L.corners.length === 4) card();
+    if (key === 'corners' && L.corners.length === 4) {
+      if (!L.tick) { L.tick = [0.86, 0.04, 0.08, 0.13]; $('hint').textContent = 'tick box: a starting guess is drawn top right. Drag a new box over the real one.'; }
+      card();
+    }
     draw();
   };
   $('cardv').onmousedown = e => { const p = at(e, $('cardv')); drag = [p[0], p[1], 0, 0]; drag.o = p; };

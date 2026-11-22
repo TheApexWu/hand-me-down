@@ -53,7 +53,7 @@
     <section>
       <h2>Rail <span id="counts" class="dim"></span></h2>
       <ul id="rail"></ul>
-      <div id="unread-wrap" hidden><h2 style="margin-top:12px" class="warn">Unread: type what the card says</h2><ul id="unread"></ul></div>
+      <div id="unread-wrap" hidden><h2 style="margin-top:12px" class="warn">Not on the rail: unread, or the arm can't write it</h2><ul id="unread"></ul></div>
     </section>
   </div>
   <div>
@@ -86,7 +86,8 @@
     try { st = await (await fetch('/api/status', {cache: 'no-store'})).json(); } catch (e) { $('error').textContent = 'server not answering'; return; }
     const s = st.state, v = s.v, vis = st.visitor, j = st.job, L = st.layout;
     $('cam').textContent = st.camera ? '· ' + st.camera : '';
-    $('busy').textContent = st.busy ? 'working… (' + s.stage + ')' : s.stage;
+    $('busy').textContent = (st.busy ? 'working… (' + s.stage + ')' : s.stage) + (s.late ? ' · NO REPLY FROM THE ARM: withdraw the job, or play the simulation' : '');
+    $('busy').className = s.late ? 'bad' : 'warn';
     $('error').textContent = [st.error, st.camera_error].filter(Boolean).join(' · ');
     $('notes').textContent = [st.layout_measured ? '' : 'layout.json is not measured yet: the whole frame is treated as the card', L.house_line === 'PLACEHOLDER HOUSE LINE' ? 'house line is still the placeholder' : '', L.require_tick && !L.tick ? 'no tick box in the layout: every card is treated as not OK to show' : '', L.require_tick ? '' : 'require_tick is off: every card is shown without a tick', st.sim_clip ? '' : 'no simulation clip at ' + st.sim_clip_wanted].filter(Boolean).join(' · ');
     $('b-visit').disabled = $('b-seed').disabled = st.busy || s.stage === 'confirm';
@@ -96,7 +97,8 @@
     $('b-sim').className = st.sim ? 'on' : ''; $('b-sim').firstChild.textContent = st.sim ? 'Simulation is on the screen: stop' : 'Arm offline: play simulation';
     $('b-sim').disabled = !st.sim && !st.sim_clip; $('b-sim').title = st.sim_clip ? '' : 'put the clip at ' + st.sim_clip_wanted;
         $('b-rec').className = st.recording ? 'on' : ''; $('b-rec').firstChild.textContent = st.recording ? 'Stop recording' : 'Record run';
-    $('b-font').className = L.mode === 'font' ? 'main' : ''; $('b-trace').className = L.mode === 'trace' ? 'main' : '';
+    $('b-font').className = L.mode === 'font' || !L.arm_traces ? 'main' : ''; $('b-trace').className = L.mode === 'trace' && L.arm_traces ? 'main' : '';
+    $('b-trace').disabled = !L.arm_traces; $('b-trace').title = L.arm_traces ? '' : 'the arm cannot trace yet: set "arm_traces" to true in card/layout.json when it can';
     $('overlay').innerHTML = (st.layout_measured ? poly(L.corners, '#7fd1a0') : '') + poly(L.page, '#6aa9ff');
     $('counts').textContent = `· ${st.rail.length} waiting · ${st.given} given · ${st.private} kept private`;
     $('rail').innerHTML = st.rail.map(c => `<li><span class="dim mono">${nnn(c.no)} ${c.at || ''}</span> ${esc(c.line)}${c.name ? ` <span class="dim">· ${esc(c.name)}</span>` : ''}${c.ok === true ? ' <span class="go">☑</span>' : ''}${c.corrected ? ' <span class="warn">(corrected)</span>' : ''}</li>`).join('') || '<li class="dim">empty: seed it before the first visitor, or they get the house line</li>';

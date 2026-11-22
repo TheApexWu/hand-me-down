@@ -35,6 +35,8 @@
  "require_tick": true,
  "page": null,
  "mode": "font",
+ "arm_traces": false,
+ "max_chars": 60,
  "house_line": "PLACEHOLDER HOUSE LINE",
  "deadline_s": 25
 }

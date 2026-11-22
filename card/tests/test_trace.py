@@ -30,7 +30,7 @@ def a_scribble(img):                     # 210 separate marks: far more strokes 
 
 
 def give_one(tmp_path, draw, quote):
-    set_layout(mode="trace")
+    set_layout(mode="trace", arm_traces=True)
     visit.run(file=photo(tmp_path, "stranger", draw), seed=True, call=reducto_says("keeps the light on"))
     visitor = visit.ingest(file=photo(tmp_path, "visitor", lambda img: None), call=reducto_says("waits up for you"))
     return visit.give(visitor, is_online=True)   # one card waiting: picked by rule, no model needed

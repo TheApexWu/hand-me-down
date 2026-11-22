@@ -40,9 +40,14 @@ def cmd_visit(args):
             continue
         took = time.time() - t
         took_all.append(took)
+        if job is None:
+            print(f"\n{f}: card {store.nnn(card['card_no'])} read {card.get('line')!r}: NO JOB: {card.get('no_job')}")
+            failures.append(f"{f}: no job: {card.get('no_job')}")
+            continue
         print(f"\n{f}: card {store.nnn(card['card_no'])} read via {card.get('read_source') or 'nothing'}: "
               f"{card.get('line')!r} {card.get('read_error') or ''}")
-        print(f"  ok to show: {card.get('ok_to_show')}  ->  {'on the rail' if card['status'] == 'waiting' else card['status']}")
+        print(f"  ok to show: {card.get('ok_to_show')}  ->  {'on the rail' if card['status'] == 'waiting' else card['status']}"
+              + (f" ({card['cannot_write']})" if card.get("cannot_write") else ""))
         truth = Path(f).with_suffix(".txt")
         if truth.exists():
             want, got = words(truth.read_text()), words(card.get("line") or "")
@@ -120,7 +125,10 @@ def cmd_doctor(_):
     print("     cameras seen:", ", ".join(f"[{i}] {n}" for i, n in list_cameras()) or "none")
     layout = lay.load()
     ok(lay.measured(layout), "card/layout.json measured (python -m card layout)")
-    ok(layout["house_line"] != lay.DEFAULT["house_line"], 'house line written by the team ("house_line" in card/layout.json)')
+    from . import jobs
+    ok(not jobs.cannot_write(layout["house_line"], layout),
+       'house line written by the team ("house_line" in card/layout.json)'
+       + (f": {jobs.cannot_write(layout['house_line'], layout)}" if jobs.cannot_write(layout["house_line"], layout) else ""))
     ok(bool(layout.get("tick")) or not layout["require_tick"],
        'tick box area set in the layout (without it every card counts as not OK to show)')
     ok(bool(os.environ.get("OPENROUTER_API_KEY")), "OPENROUTER_API_KEY in the environment")

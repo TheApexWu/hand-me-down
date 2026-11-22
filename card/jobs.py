@@ -10,14 +10,52 @@ as fractions of the squared-up card image (card_img); crop is that line already 
 In trace mode crop is cards/NNN_trace.png: the same cut in grey with shadows and coloured
 rules removed, because that is what the tracer needs. The screen shows the untouched cut.
 House-line jobs have no card: they are numbered from 900 and are always mode "font".
+
+A job the arm refuses gets no done file and leaves the screen waiting, so nothing the arm is
+known to refuse is written at all: a line over the length it fits, a character its pen font
+lacks, the placeholder house line (cannot_write, below).
 """
 import statistics
 import time
+import unicodedata
 
 from . import layout as lay
 from . import store
 
 HOUSE_FROM = 900
+
+# The arm's own clean-up of a line, mirrored from sim/arm_worker.py (clean) at 45f5dd5: it swaps
+# these, drops accents, and then refuses anything that is not plain printable ASCII.
+TYPOGRAPHY = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": "-",
+              "\u2026": "...", "\u00a0": " ", "~": "-"}
+
+
+class NoJob(Exception):
+    """There is nothing the arm could write for this visitor. The message says why."""
+
+
+def pen_text(text):
+    """The line as the arm's pen font will see it, and the characters it has no glyph for."""
+    for a, b in TYPOGRAPHY.items():
+        text = (text or "").replace(a, b)
+    text = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+    text = " ".join(text.split())
+    return text, sorted({c for c in text if c != " " and not 32 < ord(c) < 126})
+
+
+def cannot_write(line, layout=None):
+    """Why the arm would refuse this line, or None if it can write it."""
+    layout = layout or lay.load()
+    text, missing = pen_text(line)
+    if not text:
+        return "there are no words to write"
+    if "PLACEHOLDER" in text.upper():
+        return "it is still the placeholder"
+    if missing:
+        return "the arm's pen has no way to write " + " ".join(missing)
+    if len(text) > layout["max_chars"]:
+        return f"it is {len(text)} characters long and the arm fits {layout['max_chars']}"
+    return None
 
 
 def job_file(n):
@@ -35,9 +73,12 @@ def write(pick, visitor, layout=None):
         raise PermissionError(f"card {store.nnn(stranger['card_no'])} is not OK to show; no job is written for it")
     if stranger:
         n = stranger["card_no"]
+        problem = cannot_write(stranger["line"], layout)
+        if problem:
+            raise NoJob(f"card {store.nnn(n)} can't be written: {problem}")
         mode, trace, crop = "font", None, stranger.get("crop")
         to_trace = stranger.get("trace_img") or stranger.get("crop")
-        if layout["mode"] == "trace" and to_trace:
+        if layout["mode"] == "trace" and layout.get("arm_traces") and to_trace:
             # Ask the arm's own tracer, the way the arm will call it, before promising a trace.
             # A line it can't trace cleanly is written in the font instead.
             from .trace_check import traces_cleanly
@@ -52,6 +93,9 @@ def write(pick, visitor, layout=None):
                "card_img": stranger.get("card_img"), "name": stranger.get("name") or None,
                "ok_to_show": stranger.get("ok_to_show")}
     else:
+        problem = cannot_write(layout["house_line"], layout)
+        if problem:
+            raise NoJob(f"no card is waiting, and the house line can't be written: {problem}")
         used = [int(p.stem) for p in store.folder("jobs").glob("9[0-9][0-9].json")]
         n = max(used, default=HOUSE_FROM - 1) + 1
         job = {"card_no": n, "line": layout["house_line"], "crop": None, "bbox": None, "quote": None,
@@ -68,6 +112,9 @@ def write_test(text):
     """A job whose words one of us typed, for trying the arm with no card in the loop.
 
     It follows the contract like any other job. Numbered with the house lines (from 900), always font."""
+    problem = cannot_write(text)
+    if problem:
+        raise NoJob(f"that line can't be written: {problem}")
     used = [int(p.stem) for p in store.folder("jobs").glob("9[0-9][0-9].json")]
     n = max(used, default=HOUSE_FROM - 1) + 1
     job = {"card_no": n, "line": " ".join(text.split()), "crop": None, "bbox": None, "quote": None,
@@ -84,8 +131,9 @@ def done(n):
     return store.read_json(done_file(n))
 
 
-def expected_seconds(default=120):
-    """How long the arm usually takes, from the replies so far (for the progress bar)."""
+def expected_seconds(default=90):
+    """How long the arm usually takes, from the replies so far (for the progress bar).
+    Until it has replied: 90 s, the arm side's own figure for a two- or three-line card (85 to 95 s)."""
     secs = [d["duration_s"] for d in (store.read_json(p) for p in store.folder("done").glob("*.json"))
             if d and isinstance(d.get("duration_s"), (int, float))]
     return round(statistics.median(secs)) if secs else default

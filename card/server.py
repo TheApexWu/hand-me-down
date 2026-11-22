@@ -163,7 +163,13 @@ class App:
 
     def choose(self, card):
         store.set_state(stage="choosing", visitor=self.img(card))
-        self.job = visit.give(card)
+        try:
+            self.job = visit.give(card)
+        except jobs.NoJob as none:   # nothing the arm could write: say so to the operator, show only their line
+            self.job, self.error = None, str(none)
+            visit.shelve(card)
+            store.set_state(stage="card", visitor=self.img(card))
+            return
         visit.shelve(card)
         self.show_job(card)
 
@@ -175,16 +181,19 @@ class App:
         visit.ungive(self.job)
         store.set_state(stage="choosing", visitor=self.img(card))
         card["status"] = "new"  # keep the visitor's own card off the rail while choosing
-        self.job = visit.give(card, exclude=tried)
-        if self.job.get("house") and tried:  # nothing else was waiting: give the first one back
-            jobs.job_file(self.job["card_no"]).unlink(missing_ok=True)
+        try:
+            self.job = visit.give(card, exclude=tried)
+            if self.job.get("house") and tried:  # nothing else was waiting: give the first one back
+                jobs.job_file(self.job["card_no"]).unlink(missing_ok=True)
+                self.job = visit.give(card, exclude=())
+        except jobs.NoJob:                       # nothing else could be written either: the first gift stands
             self.job = visit.give(card, exclude=())
         visit.shelve(card)
         self.show_job(card)
 
     def test_job(self, text):
         """Send the arm a line one of us typed: no card, no chooser. For trying the arm."""
-        self.visitor, self.job = None, jobs.write_test(text)
+        self.visitor, self.job = None, jobs.write_test(text)   # raises jobs.NoJob with the reason
         self.show_job(None)
 
     def withdraw(self):
@@ -217,6 +226,10 @@ class App:
                     self.record_stop()
                 continue
             reply = jobs.done(self.job["card_no"])
+            waited = time.time() - st.get("started", time.time())
+            if not reply and not st.get("late") and waited > max(180, 2.5 * st.get("est_s", 90)):
+                # a job the arm refuses gets no reply: tell the operator instead of waiting for ever
+                store.set_state(**{**st, "late": True})
             if reply:
                 store.set_state(**{**st, "stage": "delivered", "postmark": {
                     "written_at": self.job["written_at"], "delivered_at": reply.get("delivered_at"),
@@ -264,7 +277,8 @@ class App:
             "visitor": visitor and {**brief(visitor), "img": self.img(visitor), "source": visitor.get("read_source")},
             "job": self.job, "done": self.job and jobs.done(self.job["card_no"]),
             "rail": [brief(c) for c in cards if c.get("status") == "waiting"],
-            "unread": [brief(c) for c in cards if c.get("status") == "unread"],
+            "unread": [{**brief(c), "error": c.get("cannot_write") or c.get("read_error")}
+                       for c in cards if c.get("status") in ("unread", "unwritable")],
             "given": sum(c.get("status") == "given" for c in cards),
             "private": sum(c.get("status") == "private" for c in cards),
             "layout": layout, "layout_measured": lay.measured(layout),
@@ -452,8 +466,9 @@ def make_handler(app):
                 lay.save({**lay.load(), **keep})
             elif path == "/api/testjob":
                 text = " ".join(str(arg("text") or "").split())
-                if not text:
-                    return self.send({"ok": False, "error": "type the line first"}, code=400)
+                problem = "type the line first" if not text else jobs.cannot_write(text)
+                if problem:
+                    return self.send({"ok": False, "error": f"that line can't be written: {problem}"}, code=400)
                 ok = app.start(lambda: app.test_job(text))
             elif path == "/api/withdraw":
                 ok = app.start(app.withdraw)

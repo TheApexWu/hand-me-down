@@ -20,8 +20,8 @@ def fix_line(card, text):
     card["line"] = text.strip()
     card["corrected"] = True
     card["read_error"] = None
-    if card["status"] == "unread" and card.get("may_show"):
-        card["status"] = "waiting"
+    if card["status"] in ("unread", "unwritable"):
+        return shelve(card)
     return store.save_card(card)
 
 
@@ -29,10 +29,16 @@ def shelve(card):
     """Put a card on the rail, or mark it unread so someone types its line in later.
 
     A card whose "OK to show" box isn't ticked stays private: never on the rail, never given."""
+    card.pop("cannot_write", None)
     if not card.get("may_show"):
         card["status"] = "private"
+    elif not card.get("line"):
+        card["status"] = "unread"
+    elif jobs.cannot_write(card["line"]):
+        # too long for the arm, or a character its pen can't draw: it would only ever be refused
+        card["status"], card["cannot_write"] = "unwritable", jobs.cannot_write(card["line"])
     else:
-        card["status"] = "waiting" if card.get("line") else "unread"
+        card["status"] = "waiting"
     return store.save_card(card)
 
 
@@ -44,13 +50,13 @@ def discard(card):
 def give(visitor, exclude=(), **kw):
     """Choose a card for this visitor and write the job for the arm."""
     choice = pick.choose(visitor, exclude=exclude, **kw)
-    if choice["card_no"]:
-        stranger = store.load_card(choice["card_no"])
-        if not stranger.get("may_show"):
-            raise PermissionError(f"card {store.nnn(stranger['card_no'])} is not OK to show; it cannot be given")
+    stranger = store.load_card(choice["card_no"]) if choice["card_no"] else None
+    if stranger and not stranger.get("may_show"):
+        raise PermissionError(f"card {store.nnn(stranger['card_no'])} is not OK to show; it cannot be given")
+    job = jobs.write(choice, visitor)   # raises jobs.NoJob if there is nothing the arm could write
+    if stranger:
         stranger.update(status="given", given_to=visitor["card_no"], given_at=time.time())
         store.save_card(stranger)
-    job = jobs.write(choice, visitor)
     visitor.setdefault("got", []).append(job["card_no"])
     store.save_card(visitor)
     return job
@@ -72,6 +78,10 @@ def run(frame=None, file=None, seed=False, call=None, **kw):
     card = ingest(frame=frame, file=file, call=call)
     if seed:
         return shelve(card), None
-    job = give(card, **kw)
+    try:
+        job = give(card, **kw)
+    except jobs.NoJob as none:
+        job = None
+        card["no_job"] = str(none)
     shelve(card)  # the visitor's card joins the rail only after their gift is chosen
     return card, job

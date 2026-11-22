@@ -95,7 +95,7 @@ def test_network_off_still_makes_a_job_marked_offline(card_photo):
 
 
 def test_network_off_and_nothing_cached_gives_the_house_line(card_photo):
-    set_layout(house_line="TEAM WRITES THIS", mode="trace")
+    set_layout(house_line="TEAM WRITES THIS", mode="trace", arm_traces=True)
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says(None), is_online=False)
     assert job["picked_by"] == "offline" and job["line"] == "TEAM WRITES THIS" and job["card_no"] == 900
     assert job["mode"] == "font" and job["crop"] is None and (store.BASE / "jobs" / "900.json").exists()
