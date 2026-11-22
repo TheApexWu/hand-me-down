@@ -89,3 +89,21 @@ def test_the_demo_button_goes_from_card_to_job_and_shows_the_read(card_photo, si
 def test_a_plain_visit_never_shows_the_read_on_the_public_screen(card_photo, site):
     site.capture(card_photo("a", "x"), "I feel lost")
     assert not any(k.startswith("mine") for k in wait_for("confirm", site))
+
+
+def test_next_card_resets_the_rail_and_runs_again(card_photo, site, monkeypatch):
+    monkeypatch.setattr(server, "DEMO_HOLD_S", 0.05)
+    site.capture(card_photo("a", "Keep Going!!"), "Keep Going!!", seed=True)
+    monkeypatch.setattr(pick, "HERMES_CMD", FAKE + "'" + json.dumps([["001", "Keep Going!!"]] * 2) + "'")
+    for n in range(2):
+        site.app.reducto_call = reducto_says(f"I feel lost and left behind {n}")
+        assert site.call("/api/next", body={"file": str(card_photo(f"v{n}", "v"))})[0] == 200
+        writing = wait_for("writing", site)
+        assert writing["quote"] == "Keep Going" and writing["job"] == 1
+        assert site.call("/api/next", body={})[0] == 409                  # never while the pen may be down
+        assert fake_arm.run_once(store.BASE, seconds=0.1, log=lambda *_: None) == ["001"]
+        wait_for("delivered", site)
+        for _ in range(100):                                             # the server notices the reply on its next tick
+            if not json.loads(site.get("/api/status")[1])["busy"]:
+                break
+            time.sleep(0.02)
