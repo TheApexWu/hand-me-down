@@ -30,6 +30,7 @@ def decide(payload):
         except json.JSONDecodeError:
             args = {}
     turn = store.read_json(store.turn_file())
+    already_over = bool(turn and turn.get("closed"))
     pick, message = judge_give(turn, args.get("card", ""), args.get("quote", ""))
     if pick:
         return None  # allowed: the tool itself records the gift and closes the turn
@@ -37,8 +38,8 @@ def decide(payload):
         turn.setdefault("calls", []).append(
             {"card": str(args.get("card")), "quote": args.get("quote"), "ok": False, "by": "hook", "message": message})
         store.write_json(store.turn_file(), turn)
-        if turn.get("closed") and not (store.read_json(store.pick_file()) or {}).get("card"):
-            store.write_json(store.pick_file(), {"turn": turn["turn"], "failed": message})
+        if turn.get("closed") and not already_over and not (store.read_json(store.pick_file()) or {}).get("card"):
+            store.write_json(store.pick_file(), {"turn": turn["turn"], "failed": message})  # the last try is used up
     return message
 
 

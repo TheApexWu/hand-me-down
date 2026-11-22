@@ -10,6 +10,7 @@ It moves nothing and writes nothing on paper. Standard library only.
   python card/fake_arm.py --seconds 8          # run beside `python -m card serve`
 """
 import argparse
+import functools
 import json
 import time
 from pathlib import Path
@@ -41,6 +42,9 @@ def run_once(root, seconds, log=print, sleep=time.sleep):
         delivered.append(job_file.stem)
         log(f"job {job_file.stem}: done")
     return delivered
+
+
+print = functools.partial(print, flush=True)  # a person is watching this log, often through a pipe
 
 
 def main():

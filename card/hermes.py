@@ -128,6 +128,14 @@ def _key_mark():
     return hashlib.sha256(key.encode()).hexdigest()[:12] if key else ""
 
 
+def _code_mark():
+    """A fingerprint of the code the gateway keeps loaded (the body server and what it imports)."""
+    h = hashlib.sha256()
+    for name in ("body_server.py", "quote.py", "store.py", "hooks/quote_on_card.py"):
+        h.update((store.ROOT / "card" / name).read_bytes())
+    return h.hexdigest()[:12]
+
+
 def _give_profile_the_key(mark):
     """Put the key in the profile's .env. It travels on stdin, never on a command line."""
     script = (f"cd {PROFILE_DIR} && umask 077 && "
@@ -196,7 +204,11 @@ def up(log=print, wait=240):
         _give_profile_the_key(mark)
         log(f"gave the {PROFILE} profile the OpenRouter key")
         restart = True
-    if restart:  # the gateway reads profiles, their config and their secrets when it starts
+    if inside("cat", f"{PROFILE_DIR}/.hmd-code").stdout.strip() != _code_mark():
+        inside("sh", "-c", f"printf %s {_code_mark()} > {PROFILE_DIR}/.hmd-code")
+        log("the body server's code changed since the gateway loaded it")
+        restart = True
+    if restart:  # the gateway reads profiles, their config and their secrets, and loads the body server, when it starts
         docker("restart", NAME, timeout=180)
         log("restarted the gateway to load the profile")
     started = time.time()

@@ -42,6 +42,27 @@ def test_job_matches_the_contract(card_photo):
     assert jobs.done(2)["duration_s"] == 134 and jobs.expected_seconds() == 134
 
 
+def test_a_second_give_after_the_gift_changes_nothing(card_photo):
+    """A model that calls give again after it has given must not undo, or replace, the gift."""
+    seed(card_photo, LEAVING, FORGIVEN)
+    _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("was let off the hook"), is_online=True,
+                       cmd=calls(["002", "been forgiven and"], ["001", "is leaving and"], ["002", "made up words"]))
+    assert job["picked_by"] == "hermes" and job["card_no"] == 2 and job["quote"] == "been forgiven and"
+    assert job["misses"] == 0 and store.load_card(1)["status"] == "waiting"
+
+
+def test_the_hook_does_not_undo_a_gift_either(card_photo):
+    store.write_json(store.turn_file(), {"turn": "t9", "visitor": 9, "misses": 0, "max_misses": 2,
+                                         "candidates": {"003": FORGIVEN}})
+    from card.body_server import give
+    assert json.loads(give("003", "forgiven and doesn't")) == {"ok": True, "given": "003"}
+    hook = [sys.executable, str(store.ROOT / "card" / "hooks" / "quote_on_card.py")]
+    payload = {"hook_event_name": "pre_tool_call", "tool_name": "mcp__body__give", "tool_input": {"card": "003", "quote": "again"}}
+    out = subprocess.run(hook, input=json.dumps(payload), capture_output=True, text=True, timeout=20).stdout
+    assert json.loads(out)["action"] == "block" and "over" in json.loads(out)["message"]
+    assert store.read_json(store.pick_file())["card"] == "003"
+
+
 def test_two_bad_quotes_fall_back_to_the_longest_waiting_card(card_photo):
     seed(card_photo, LEAVING, FORGIVEN)
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("anything"), is_online=True,

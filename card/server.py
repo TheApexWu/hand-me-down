@@ -9,6 +9,8 @@ laptop can POST its reply to /done/NNN.json, but only with the shared token: eve
 refuses a request from another machine that doesn't carry it. The operator page, the layout
 tool and everything that changes state answer this machine only, token or not.
 """
+import builtins
+import functools
 import hmac
 import json
 import os
@@ -470,6 +472,7 @@ def serve(port=8040, lan=False, camera_spec=None, use_camera=True, image=None, o
         app.token = lan_token()
     httpd = ThreadingHTTPServer(("0.0.0.0" if lan else "127.0.0.1", port), make_handler(app))
     httpd.daemon_threads = True
+    print = functools.partial(builtins.print, flush=True)  # these lines carry the token: show them even when piped
     print(f"screen    http://localhost:{port}/")
     print(f"operator  http://localhost:{port}/op")
     print(f"layout    http://localhost:{port}/layout")

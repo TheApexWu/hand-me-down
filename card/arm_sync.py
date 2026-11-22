@@ -12,6 +12,7 @@ The card laptop prints this exact line, with its address and token, when it star
   python -m card serve --lan
 """
 import argparse
+import functools
 import json
 import os
 import re
@@ -98,6 +99,9 @@ def sync_once(base, root, token, have, sent, log=print):
             problems += 1
             log(f"done {done.stem}: {type(exc).__name__}: {exc}; will retry")
     return problems
+
+
+print = functools.partial(print, flush=True)  # a person is watching this log, often through a pipe
 
 
 def main():

@@ -26,6 +26,7 @@ def give(card: str, quote: str) -> str:
     Refused if the words are not on the card.
     """
     turn = store.read_json(store.turn_file())
+    already_over = bool(turn and turn.get("closed"))
     pick, message = judge_give(turn, card, quote)
     if turn is not None:
         turn.setdefault("calls", []).append(
@@ -33,7 +34,9 @@ def give(card: str, quote: str) -> str:
         store.write_json(store.turn_file(), turn)
         if pick:
             store.write_json(store.pick_file(), pick)
-        elif turn.get("closed"):
+        elif turn.get("closed") and not already_over:
+            # this call used up the last try. A call after the turn is over (a second give after a
+            # gift, say) changes nothing: it must never overwrite the gift already recorded.
             store.write_json(store.pick_file(), {"turn": turn["turn"], "failed": message})
     return json.dumps({"ok": True, "given": pick["card"]} if pick else {"error": message})
 
