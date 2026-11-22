@@ -35,7 +35,7 @@ RED_LINE_V = 24.0                    # same header position as demo_twin
 TEXT_V = (-(CARD_V / 2 - FIT_MARGIN), RED_LINE_V - 2.0)
 CAP_MAX, CAP_MIN, CAP_STEP = 18.0, 6.0, 0.25
 MAX_LINES, PITCH = 3, 1.45
-MAX_QUOTE_WORDS, MAX_QUOTE_CHARS = 3, 24
+MAX_QUOTE_WORDS, MAX_QUOTE_CHARS = 3, 40
 FONT_CAP = 21.0
 
 HOVER_Z, LIFT = 95.0, 8.0
