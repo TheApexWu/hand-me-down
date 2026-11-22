@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 import cv2
 
-from . import jobs, read_card, store, visit
+from . import bank, jobs, read_card, store, visit
 from . import layout as lay
 from .quote import words as norm_words
 
@@ -302,6 +302,9 @@ class App:
         """The cards the chooser is comparing this visitor's line with (all OK to show), for the screen."""
         out = []
         for c in store.waiting(exclude={visitor["card_no"]})[:most]:
+            if bank.is_archive(c):   # no handwriting: the screen shows a typed slip marked ARCHIVE
+                out.append({"no": c["card_no"], "archive": True})
+                continue
             url, size = self.ink(c)
             if url and size:
                 out.append({"no": c["card_no"], "ink": url, "size": size})
@@ -310,12 +313,16 @@ class App:
     def show_job(self, visitor):
         job = self.job
         stranger = None if job.get("house") else store.load_card(job["card_no"])
+        made = job.get("provenance") or ("house" if job.get("house") else "visitor")
         # Quote mode: the public screen shows only the words the visitor receives, in the stranger's
-        # own hand. Never the visitor's card, never the rest of the stranger's.
-        url, size = (quote_image(stranger, job.get("quote_box")) if stranger and stranger.get("may_show") else (None, None))
+        # own hand. Never the visitor's card, never the rest of the stranger's. An archive line has no
+        # hand: the screen types it on a slip marked ARCHIVE, so it never passes for a visitor's card.
+        url, size = (quote_image(stranger, job.get("quote_box"))
+                     if stranger and stranger.get("may_show") and made != "archive" else (None, None))
         if not stranger and HANDWRITING["house"].exists():   # the house line, in the team's own hand
             url, size = "/house.png", image_size(HANDWRITING["house"])
-        store.set_state(stage="writing", stranger=url, stranger_size=size,
+        store.set_state(stage="writing", stranger=url, stranger_size=size, provenance=made,
+                        source=bank.provenance(stranger)["source_name"] if made == "archive" else None,
                         by=job["picked_by"], quote=job.get("quote"), mode=job.get("mode"),
                         misses=job.get("misses", 0), pick_secs=job.get("pick_secs"),
                         job=job["card_no"], house=bool(job.get("house")), started=time.time(), est_s=jobs.expected_seconds())
@@ -337,7 +344,7 @@ class App:
             elif reply:
                 store.set_state(**{**st, "stage": "delivered", "held": None, "postmark": {
                     "written_at": self.job["written_at"], "delivered_at": reply.get("delivered_at"),
-                    "duration_s": reply.get("duration_s")}})
+                    "duration_s": reply.get("duration_s"), "provenance": self.job.get("provenance")}})
                 self.record_stop()
             elif st["stage"] == "writing" and waited > max(180, 2.5 * st.get("est_s", 90)):
                 # no reply at all: the visitor screen must not sit on "writing" for ever
@@ -379,7 +386,8 @@ class App:
 
     def stack(self, most=6):
         """The idle screen's loose stack: recent cards that are OK to show, newest first, as ink."""
-        cards = [c for c in store.all_cards() if c.get("may_show") and c.get("status") in ("waiting", "given")]
+        cards = [c for c in store.all_cards() if c.get("may_show") and c.get("status") in ("waiting", "given")
+                 and not bank.is_archive(c)]   # the stack is visitors' handwriting only
         out = []
         for c in reversed(cards):
             url, size = self.ink(c)
@@ -390,16 +398,20 @@ class App:
         made = {k: (f"/{k}.png" if p.exists() else None) for k, p in HANDWRITING.items()}
         sizes = {f"{k}_size": image_size(p) if p.exists() else None for k, p in HANDWRITING.items()}
         delivered = sum(1 for p in store.folder("done").glob("[0-9]*.json") if jobs.delivered(store.read_json(p)))
-        return {"cards": out, **made, **sizes, "waiting": len(store.waiting()), "delivered": delivered}
+        waiting = store.waiting()
+        archive = sum(1 for c in waiting if bank.is_archive(c))   # never counted as visitors' cards
+        return {"cards": out, **made, **sizes, "waiting": len(waiting) - archive, "archive": archive, "delivered": delivered}
 
     def status(self):
         def brief(c):
             if not c.get("may_show"):  # private: not even the operator page shows its words
                 return {"no": c["card_no"], "line": "", "name": None, "ok": c.get("ok_to_show"), "private": True,
                         "error": None, "corrected": False, "at": c.get("written_at")}
+            made = bank.provenance(c)
             return {"no": c["card_no"], "line": c.get("line", ""), "name": c.get("name"), "ok": c.get("ok_to_show"),
                     "error": c.get("read_error"), "corrected": c.get("corrected", False), "at": c.get("written_at"),
-                    "checked": bool(c.get("checked"))}
+                    "checked": bool(c.get("checked")), "provenance": made["provenance"],
+                    "archive_source": made["source_name"], "bank_id": made["bank_id"]}
         cards = store.all_cards()
         visitor = store.load_card(self.visitor) if self.visitor else None
         layout = lay.load()

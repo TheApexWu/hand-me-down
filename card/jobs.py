@@ -16,6 +16,11 @@ Quote mode: for a stranger's card the arm writes only `quote`, an exact phrase o
 from one written row of that card, at most 16 characters (card/quotes.py); `line` keeps the whole
 card. House-line and typed test jobs still have the arm write `line`.
 
+Every job says where its words came from: "provenance" is "visitor" (a stranger's handwritten
+card), "archive" (a screened human line from the public message bank, card/bank.py, with its
+"source" and "bank_id"; these have no handwriting and are never shown as a visitor's card),
+"house" or "test". The arm can ignore it; the screens and the record use it.
+
 A job the arm refuses gets no done file and leaves the screen waiting, so nothing the arm is
 known to refuse is written at all: a quote over its limit, a line over the length it fits (for
 house and test jobs), a character its pen font lacks, the placeholder house line.
@@ -23,8 +28,8 @@ house and test jobs), a character its pen font lacks, the placeholder house line
 import statistics
 import time
 
+from . import bank, quotes, store
 from . import layout as lay
-from . import quotes, store
 from .pen import MAX_QUOTE_CHARS, MAX_QUOTE_WORDS, pen_text
 
 HOUSE_FROM = 900
@@ -91,6 +96,8 @@ def write(pick, visitor, layout=None):
                "mode": mode, "trace": trace,
                "card_img": stranger.get("card_img"), "name": stranger.get("name") or None,
                "ok_to_show": stranger.get("ok_to_show")}
+        made = bank.provenance(stranger)
+        job.update(provenance=made["provenance"], source=made["source"], bank_id=made["bank_id"])
     else:
         problem = cannot_write(layout["house_line"], layout)
         if problem:
@@ -99,7 +106,7 @@ def write(pick, visitor, layout=None):
         n = max(used, default=HOUSE_FROM - 1) + 1
         job = {"card_no": n, "line": layout["house_line"], "crop": None, "bbox": None, "quote": None,
                "picked_by": pick["picked_by"], "written_at": store.clock(), "mode": "font",
-               "card_img": None, "name": None, "ok_to_show": None, "house": True}
+               "card_img": None, "name": None, "ok_to_show": None, "house": True, "provenance": "house"}
     job.update(visitor_no=visitor["card_no"], why=pick["why"], misses=pick["misses"],
                pick_secs=pick["secs"], queued_at=time.time())
     done_file(n).unlink(missing_ok=True)
@@ -118,7 +125,7 @@ def write_test(text):
     n = max(used, default=HOUSE_FROM - 1) + 1
     job = {"card_no": n, "line": " ".join(text.split()), "crop": None, "bbox": None, "quote": None,
            "picked_by": "rule", "written_at": store.clock(), "mode": "font", "trace": None,
-           "card_img": None, "name": None, "ok_to_show": None, "house": True, "test": True,
+           "card_img": None, "name": None, "ok_to_show": None, "house": True, "test": True, "provenance": "test",
            "visitor_no": None, "why": "a test line typed by the operator", "misses": 0, "pick_secs": 0.0,
            "queued_at": time.time()}
     done_file(n).unlink(missing_ok=True)

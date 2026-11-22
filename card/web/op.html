@@ -105,8 +105,9 @@
     $('b-font').className = L.mode === 'font' || !L.arm_traces ? 'main' : ''; $('b-trace').className = L.mode === 'trace' && L.arm_traces ? 'main' : '';
     $('b-trace').disabled = !L.arm_traces; $('b-trace').title = L.arm_traces ? '' : 'the arm cannot trace yet: set "arm_traces" to true in card/layout.json when it can';
     $('overlay').innerHTML = (st.layout_measured ? poly(L.corners, '#7fd1a0') : '') + poly(L.page, '#6aa9ff');
-    $('counts').textContent = `· ${st.rail.length} waiting · ${st.given} given · ${st.private} kept private`;
-    $('rail').innerHTML = st.rail.map(c => `<li><span class="dim mono">${nnn(c.no)} ${c.at || ''}</span> ${esc(c.line)}${c.name ? ` <span class="dim">· ${esc(c.name)}</span>` : ''}${c.ok === true ? ' <span class="go">☑</span>' : ''}${c.corrected ? ' <span class="warn">(corrected)</span>' : ''}</li>`).join('') || '<li class="dim">empty: seed it before the first visitor, or they get the house line</li>';
+    const archived = st.rail.filter(c => c.provenance === 'archive').length;
+    $('counts').textContent = `· ${st.rail.length - archived} waiting${archived ? ` + ${archived} archive` : ''} · ${st.given} given · ${st.private} kept private`;
+    $('rail').innerHTML = st.rail.map(c => `<li><span class="dim mono">${nnn(c.no)} ${c.provenance === 'archive' ? '' : c.at || ''}</span>${c.provenance === 'archive' ? ` <span class="warn mono">ARCHIVE ${esc(c.bank_id || '')} · ${esc(c.archive_source || '')}</span>` : ''} ${esc(c.line)}${c.name ? ` <span class="dim">· ${esc(c.name)}</span>` : ''}${c.ok === true ? ' <span class="go">☑</span>' : ''}${c.corrected ? ' <span class="warn">(corrected)</span>' : ''}</li>`).join('') || '<li class="dim">empty: seed it before the first visitor, or they get the house line</li>';
     $('check-wrap').hidden = !st.unchecked.length;
     const want = st.unchecked.map(c => c.no).join(',');
     if ($('check').dataset.cards !== want && document.activeElement?.dataset.check === undefined) {
@@ -124,7 +125,8 @@
     setImg($('vcrop'), vis && vis.img, v);
     $('vmeta').textContent = vis ? [vis.private ? '' : vis.checked ? 'read approved' : 'READ NOT CHECKED YET: compare it with the handwriting',
       vis.source && 'read via ' + vis.source, vis.name && 'from ' + vis.name, vis.ok === true ? 'OK to show: ticked' : vis.ok === false ? 'OK to show: not ticked' : '', vis.error && vis.line ? vis.error : ''].filter(Boolean).join(' · ') : '';
-    $('pick').textContent = j ? `· jobs/${nnn(j.card_no)}.json · ${j.picked_by} · ${j.mode} · ${j.pick_secs}s` + (delivered ? ' · delivered' : st.done ? ' · REFUSED' : s.stage === 'held' ? ' · no reply' : ' · waiting for the arm') : '';
+    $('pick').textContent = j ? `· jobs/${nnn(j.card_no)}.json · ${j.picked_by} · ${j.mode} · ${j.pick_secs}s` +
+      (j.provenance === 'archive' ? ` · ARCHIVE LINE ${j.bank_id} (${(j.source || '').split(' (')[0]}), not a visitor's card` : '') + (delivered ? ' · delivered' : st.done ? ' · REFUSED' : s.stage === 'held' ? ' · no reply' : ' · waiting for the arm') : '';
     $('pick').className = j && j.picked_by !== 'hermes' ? 'warn' : 'go';
     $('gtext').textContent = j ? j.line : 'nothing chosen'; $('gtext').className = 'big ' + (j ? '' : 'dim');
     setImg($('gcrop'), j && j.crop && '/' + j.crop, v);

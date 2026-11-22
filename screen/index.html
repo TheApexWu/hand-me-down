@@ -72,6 +72,19 @@
   .postmark.landed { opacity: .92; transform: rotate(-9deg); }
   .postmark text { font: 700 15px var(--mono); fill: currentColor; letter-spacing: .06em; }
 
+  /* an archive line (card/bank.py): no visitor wrote it here, so it has no handwriting. It is typed on a
+     plain manila slip with no notebook rules and stamped ARCHIVE, so it never passes for a visitor's card. */
+  .card.archive { background: #e7dcc4; }
+  .card.archive::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+                          box-shadow: inset 0 0 0 .55vh rgba(255, 255, 255, .25), inset 0 0 3vh rgba(120, 90, 40, .18); }
+  .archstamp { position: absolute; left: 5%; top: 8%; padding: .25em .7em .2em; border: .32vh double var(--mark); border-radius: .3vh;
+               color: var(--mark); font: 800 1.9vh var(--mono); letter-spacing: .32em; transform: rotate(-5deg); opacity: .85;
+               mix-blend-mode: multiply; pointer-events: none; }
+  #cands .archstamp { font-size: 1vh; border-width: .22vh; }
+  .archbox { position: relative; max-width: 100%; }
+  .archtext { font: 5.2vh/1.15 var(--type); color: var(--ink); text-align: center; white-space: nowrap; }
+  .archlines { width: 80%; height: 46%; background: repeating-linear-gradient(to bottom, rgba(29, 27, 24, .2) 0 .55vh, transparent .55vh 2.1vh); }
+
   /* reading: a blank card under a scanning beam */
   #scan { width: 42vw; left: 50%; top: 40%; display: none; overflow: hidden; z-index: 15; }
   .stage-reading #scan, .stage-confirm #scan { display: block; animation: rise .6s ease-out both; }
@@ -212,6 +225,7 @@
     checking: 'CHECKING THE READ', comparing: n => `COMPARING WITH <b>${n}</b> CARDS`,
     received: 'YOU RECEIVE', checked: 'PHRASE FOUND ON CARD', picked: s => `PICKED IN <b>${s}</b> S`, rule: 'PICKED BY RULE',
     house: 'FROM THE HOUSE',
+    archive: 'ARCHIVE', archive_line: src => `FROM THE ARCHIVE${src ? `  <b>${src}</b>` : ''}`, archived: n => `${n} ARCHIVE`,
     pen: 'PEN', delivered_at: (t, d) => `DELIVERED <b>${t}</b>  TOOK <b>${d}</b>`, returned: 'RETURNED TO THE STACK',
     phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
   };
@@ -279,8 +293,25 @@
     area.appendChild(box);
     return out;
   }
+  function unarchive(el) { el.classList.remove('archive'); el.querySelectorAll(':scope > .archstamp').forEach(x => x.remove()); }
+  function fillArchive(el, text) {
+    const area = el.querySelector('.area'); area.innerHTML = '';
+    el.classList.add('archive');
+    if (!el.querySelector(':scope > .archstamp')) { const st = document.createElement('span'); st.className = 'archstamp'; st.textContent = LABELS.archive; el.appendChild(st); }
+    if (text == null) { const bars = document.createElement('div'); bars.className = 'archlines'; area.appendChild(bars); return null; }
+    const box = document.createElement('div'); box.className = 'archbox';
+    const t = document.createElement('div'); t.className = 'archtext'; t.textContent = `“${text}”`; box.appendChild(t);
+    const nib = document.createElement('div'); nib.className = 'nib'; box.appendChild(nib);
+    area.appendChild(box);
+    return {archive: true, box, text: t, nib, markEls: []};
+  }
   function reveal(c, p) {
     if (!c) return;
+    if (c.archive) {
+      c.text.style.clipPath = `inset(0 ${((1 - p) * 100).toFixed(2)}% 0 0)`;
+      c.nib.style.left = p * 100 + '%'; c.nib.style.top = '55%'; c.nib.style.visibility = p > 0 && p < 1 ? 'visible' : 'hidden';
+      return;
+    }
     const widths = c.R.map(r => 1 - r[0]), total = widths.reduce((a, b) => a + b, 0) || 1;
     let left = p * total, active = false;
     c.R.forEach((r, i) => {
@@ -292,7 +323,7 @@
     });
     c.nib.style.visibility = active ? 'visible' : 'hidden';
   }
-  const finish = c => { if (c) { c.box.classList.remove('revealing'); c.markEls.forEach(m => m.p.classList.add('on')); } };
+  const finish = c => { if (c) { c.box.classList.remove('revealing'); c.markEls.forEach(m => m.p.classList.add('on')); if (c.archive) c.text.style.clipPath = 'none'; } };
 
   /* ---------- notes under the card ---------- */
   function note(id, html, cls = '') { const el = $(id); el.className = 'line ' + cls; el.innerHTML = html; requestAnimationFrame(() => el.classList.add('on')); return el; }
@@ -351,7 +382,7 @@
   let stackEls = [], stackSig = '';
   async function loadStack() {
     let data; try { data = await (await fetch('/stack.json', {cache: 'no-store'})).json(); } catch (e) { return; }
-    $('count').textContent = `${LABELS.waiting(data.waiting ?? 0)}   ${LABELS.delivered(data.delivered ?? 0)}`;
+    $('count').textContent = `${LABELS.waiting(data.waiting ?? 0)}${data.archive ? `   ${LABELS.archived(data.archive)}` : ''}   ${LABELS.delivered(data.delivered ?? 0)}`;
     const inv = $('invite');
     if (data.invitation) { inv.src = data.invitation; inv.classList.add('shown'); } else inv.classList.remove('shown');
     const cards = data.cards.slice(0, 6), sig = cards.map(c => c.no).join(',') + '|' + !!data.invitation;
@@ -412,8 +443,8 @@
         const d = D(), n = cands.length, span = Math.min(d.width * .86, n * vw(13));
         cands.forEach((c, i) => {
           const el = document.createElement('div'); el.className = 'card'; el.dataset.no = c.no;
-          el.innerHTML = `<div class="area"></div><span class="tag">No. ${nnn(c.no)}</span>`;
-          $('cands').appendChild(el); fillCard(el, c.ink, c.size);
+          el.innerHTML = `<div class="area"></div><span class="tag">${c.archive ? LABELS.archive : `No. ${nnn(c.no)}`}</span>`;
+          $('cands').appendChild(el); if (c.archive) fillArchive(el, null); else fillCard(el, c.ink, c.size);
           place(el, d.width / 2 - span / 2 + span * (i + .5) / n, vh(52) + (i % 2 ? vh(3) : 0), [-4, 3, -2, 5, -3, 2][i % 6]);
           setTimeout(() => el.classList.add('on'), reduce ? 0 : 300 + i * 120);
           candEls.push(el);
@@ -426,11 +457,12 @@
     } else { clearInterval(window.lookTimer); }
 
     // the words they receive: lifted out of the card they came from, written, stamped
-    const key = s.job != null ? `${s.job}:${s.stranger}` : null;
+    const key = s.job != null ? `${s.job}:${s.stranger}` : null, archive = s.provenance === 'archive';
     if (now === 'writing' || now === 'delivered') {
       if (theirsKey !== key) {
         const whole = [[.04, .12, .96, .9]];                                   // the received phrase is one row
-        theirs = fillCard(theirsEl, s.stranger, s.stranger_size, {rows: whole, marks: s.house ? [] : [[.03, .1, .94, .72]], seed: (s.job || 3) * 7 + 3});
+        if (archive) theirs = fillArchive(theirsEl, s.quote || '');
+        else { unarchive(theirsEl); theirs = fillCard(theirsEl, s.stranger, s.stranger_size, {rows: whole, marks: s.house ? [] : [[.03, .1, .94, .72]], seed: (s.job || 3) * 7 + 3}); }
         theirsKey = key;
         theirsEl.querySelector('.postmark').classList.remove('landed');
         const from = candEls.find(c => +c.dataset.no === s.job);
@@ -445,14 +477,14 @@
         clearNotes();
         if (s.quote) {
           note('l1', `${LABELS.received}<span class="typed done">“${s.quote}”</span>`);
-          note('l2', `<span class="ok">✓</span> ${LABELS.checked} <b>${nnn(s.job)}</b>${s.by === 'hermes' && s.pick_secs != null ? `   ${LABELS.picked(s.pick_secs)}` : s.by !== 'hermes' ? `   ${LABELS.rule}` : ''}`);
+          note('l2', `<span class="ok">✓</span> ${archive ? LABELS.archive_line(s.source) : `${LABELS.checked} <b>${nnn(s.job)}</b>`}${s.by === 'hermes' && s.pick_secs != null ? `   ${LABELS.picked(s.pick_secs)}` : s.by !== 'hermes' ? `   ${LABELS.rule}` : ''}`);
         } else if (s.house) note('l1', LABELS.house);
         note('l3', `${LABELS.pen} <span class="bar"><i id="penbar"></i></span> <b id="pentime">0:00</b>`);
       }
       if (now === 'delivered') {
         finish(theirs);
         const p = s.postmark || {};
-        $('pm-a').textContent = p.written_at || ''; $('pm-b').textContent = (String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || [''])[0]; $('pm-c').textContent = mmss(p.duration_s);
+        $('pm-a').textContent = p.provenance === 'archive' ? LABELS.archive : (p.written_at || ''); $('pm-b').textContent = (String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || [''])[0]; $('pm-c').textContent = mmss(p.duration_s);
         note('l3', LABELS.delivered_at((String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || ['–'])[0], mmss(p.duration_s)));
         if (was === 'writing') stamp(theirsEl); else theirsEl.querySelector('.postmark').classList.add('landed');
       }

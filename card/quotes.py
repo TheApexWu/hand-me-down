@@ -83,7 +83,11 @@ def default(card):
 
 
 def cannot_give(card):
-    """Why this card can't be given in quote mode, or None."""
+    """Why this card can't be given in quote mode, or None. The rail, the chooser and the job all ask."""
+    from .bank import archive_problem
+    problem = archive_problem(card)
+    if problem:
+        return problem
     if "PLACEHOLDER" in (card.get("line") or "").upper():
         return "the arm refuses any line with the word placeholder in it"
     if not phrases(card):
