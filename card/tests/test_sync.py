@@ -68,6 +68,23 @@ def test_a_withdrawn_job_disappears_and_its_late_reply_does_not_block_the_next_j
     assert jobs.done(second["card_no"]) is not None
 
 
+def test_a_card_given_again_after_a_withdrawal_is_not_skipped_because_of_the_old_reply(card_photo, monkeypatch, lan):
+    site, arm, have, sent = lan
+    quiet = lambda *_: None
+    first = make_job(card_photo, monkeypatch, 1, "keeps the porch light on", "the porch light")
+    arm_sync.sync_once(site.base, arm, TOKEN, have, sent, log=quiet)
+    fake_arm.run_once(arm, seconds=0, log=quiet)            # the arm finishes job 001...
+    visit.ungive(first)                                     # ...just as the card side withdraws it
+    arm_sync.sync_once(site.base, arm, TOKEN, have, sent, log=quiet)
+    assert (arm / "done" / "001.json").exists() and not (arm / "jobs" / "001.json").exists()
+    # later the same card is given to someone else: a new job 001
+    again = visit.give(store.load_card(first["visitor_no"]), is_online=True)
+    assert again["card_no"] == 1
+    arm_sync.sync_once(site.base, arm, TOKEN, have, sent, log=quiet)
+    assert (arm / "jobs" / "001.json").exists() and not (arm / "done" / "001.json").exists()
+    assert fake_arm.run_once(arm, seconds=0, log=quiet) == ["001"]      # so the arm writes it
+
+
 def test_the_arm_skips_a_job_that_is_withdrawn_or_already_done(tmp_path):
     arm = tmp_path / "arm"
     (arm / "jobs").mkdir(parents=True)

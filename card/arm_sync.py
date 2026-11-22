@@ -66,6 +66,12 @@ def sync_once(base, root, token, have, sent, log=print):
                     if not IMAGE_PATH.fullmatch(job[key]):
                         raise ValueError(f"refusing odd image path {job[key]!r}")
                     (root / job[key]).write_bytes(request(base, "/" + job[key], token, timeout=30))
+            # A reply left over from an earlier job with this number (one that was withdrawn after the
+            # arm finished it) would make the arm skip this one: the contract skips any job with a done file.
+            stale = root / "done" / f"{stem}.json"
+            if stale.exists() and (stale.name, stale.stat().st_mtime_ns) in sent:
+                stale.unlink()
+                log(f"job {stem}: given again; cleared the old reply so the arm writes it")
             tmp = root / "jobs" / f".{stem}.tmp"
             tmp.write_bytes(raw)
             tmp.replace(root / "jobs" / f"{stem}.json")
