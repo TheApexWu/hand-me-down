@@ -13,5 +13,6 @@
     0.046
   ],
   "xy_scatter_mm_median": 1.93,
-  "source_log": "20261122-111928-pivot.jsonl"
+  "source_log": "20261122-111928-pivot.jsonl",
+  "card_rotation_deg": 5.04
 }

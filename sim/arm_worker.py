@@ -11,6 +11,7 @@ import json
 import os
 import signal
 import socket
+import subprocess
 import sys
 import time
 import unicodedata
@@ -230,11 +231,14 @@ class Planner:
         self.pen, self.ref = pg.pen_model(cal["pen_length_mm"])
         self.pen68, _ = pg.pen_model(ARMD_PEN_MM)
         self.cx, self.cy = cal["dot_base_m"][0] * 1000, cal["dot_base_m"][1] * 1000
+        rot = np.radians(cal.get("card_rotation_deg", 0.0))   # the card is never perfectly square to the arm
+        self.rc, self.rs = float(np.cos(rot)), float(np.sin(rot))
         self.l_pose = {j: float(v) for j, v in json.loads(pg.POSES.read_text())["l"]["reached_deg"].items()}
 
     def plan(self, text, z):
         strokes, lines, cap = layout(clean(text))
-        world = [np.column_stack([self.cx + s[:, 1], self.cy - s[:, 0]]) for s in strokes]
+        world = [np.column_stack([self.cx + s[:, 0] * self.rs + s[:, 1] * self.rc,
+                                  self.cy - (s[:, 0] * self.rc - s[:, 1] * self.rs)]) for s in strokes]
         hover_pt = [*world[0][0], HOVER_Z]
         hover, worst = solve(self.pen, self.ref["home_seed"], hover_pt)
         seed, chunks, inks = hover, [], []
@@ -266,6 +270,7 @@ class Planner:
                 limit_hits += int(((q[:, k] < lo) | (q[:, k] > hi + 0.01)).sum())
         tips = np.array([tip(self.pen, as_q(r)) for r in q])
         u, v = self.cy - tips[ink, 1], tips[ink, 0] - self.cx
+        u, v = u * self.rc + v * self.rs, v * self.rc - u * self.rs
         edges = {"left": float(u.min() + CARD_U / 2), "right": float(CARD_U / 2 - u.max()),
                  "top_red_edge": float(CARD_V / 2 - v.max()), "bottom_arm_edge": float(v.min() + CARD_V / 2)}
         if max_step > ARMD_STEP:
@@ -432,6 +437,10 @@ def handle(path, root, a, planner, seen):
     log(f"[{name}] writing")
     run_plan(root, path, plan)
     log(f"[{name}] delivered")
+    try:                                                      # a failed snapshot must never stop the queue
+        subprocess.run([sys.executable, str(Path(__file__).with_name("look.py")), "save", f"job-{name}"], capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"[{name}] checkpoint failed: {e}")
 
 
 def on_term(*_):

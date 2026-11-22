@@ -27,6 +27,22 @@ ALIAS = {"pan": "shoulder_pan", "lift": "shoulder_lift", "elbow": "elbow_flex", 
          "roll": "wrist_roll"}
 
 
+OFFSETS = json.loads((armlog.STATE / "joint_offsets.json").read_text()) if (armlog.STATE / "joint_offsets.json").exists() else {}
+
+
+def from_motor(d):
+    """A reseated gear moves a joint's zero; planners keep working in the original frame."""
+    return {k: v - OFFSETS.get(k, 0.0) for k, v in d.items()}
+
+
+def to_motor(d):
+    return {k: v + OFFSETS.get(k, 0.0) for k, v in d.items()}
+
+
+def read(r):
+    return from_motor(pg.read(r))
+
+
 class Refused(Exception):
     pass
 
@@ -41,9 +57,9 @@ class Server:
         self.r, self.q, self.running = r, deque(), True
         self.log = armlog.ArmLog("armd", r, temp_every_s=1e9)  # temps are read here so the loop can act on them
         self.pen, self.ref = pg.pen_model(PEN_MM)
-        self.pos, self.temps, self.phase, self.last_stop, self.lag_t = pg.read(r), {}, "idle", None, None
+        self.pos, self.temps, self.phase, self.last_stop, self.lag_t = read(r), {}, "idle", None, None
         # moves start from the last goal: starting from present banks gravity sag on every command
-        self.goal = {j: float(v) for j, v in r.bus.sync_read("Goal_Position", J).items()}
+        self.goal = from_motor({j: float(v) for j, v in r.bus.sync_read("Goal_Position", J).items()})
         self.heat = deque(maxlen=3)
 
     def z(self, q):
@@ -82,8 +98,8 @@ class Server:
         """Keep the last goal on a normal stop: goal = present would bank the gravity sag every time."""
         self.q.clear()
         if release:
-            self.pos = pg.read(self.r)
-            self.r.bus.sync_write("Goal_Position", self.pos)
+            self.pos = read(self.r)
+            self.r.bus.sync_write("Goal_Position", to_motor(self.pos))
             self.goal = dict(self.pos)
         self.phase, self.last_stop, self.lag_t = "idle", why, None
         self.log.event("halt", reason=why)
@@ -177,7 +193,7 @@ class Server:
         next_t, tick, bad, last_temp, cmd = time.monotonic(), 0, 0, 0.0, {}
         while self.running:
             try:
-                self.pos = pg.read(self.r)
+                self.pos = read(self.r)
                 bad = 0
             except Exception:
                 bad += 1
@@ -189,7 +205,7 @@ class Server:
             moving = bool(self.q)
             if moving:
                 self.phase, cmd = self.q.popleft()
-                self.r.bus.sync_write("Goal_Position", cmd)
+                self.r.bus.sync_write("Goal_Position", to_motor(cmd))
                 self.goal = cmd
                 lag = max(abs(self.pos[j] - cmd[j]) for j in J)
                 self.lag_t = (self.lag_t or time.monotonic()) if lag > pg.LAG_DEG else None
@@ -236,7 +252,7 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: setattr(s, "running", False))
     try:
         if not all(r.bus.sync_read("Torque_Enable", J, normalize=False).values()):
-            r.bus.sync_write("Goal_Position", s.pos)
+            r.bus.sync_write("Goal_Position", to_motor(s.pos))
             r.bus.enable_torque(J)
         for j in J:
             r.bus.write("P_Coefficient", j, pg.P_GAIN, normalize=False)

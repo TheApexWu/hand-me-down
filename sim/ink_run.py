@@ -19,9 +19,9 @@ import ink_ladder as il
 import pose_go as pg
 
 SOCK = str(pg.ROOT / "state" / "armd.sock")
-LEVELS_MM = [46.0, 45.0, 44.0, 43.0]                          # 47.5 only left dots: find the first solid line
-DOT_MM = (198.0, 25.3)                                        # the first run's dash landed ~8 mm short of pen.json
-DX, DY, GAP, DASH, HOVER, ABOVE = 15.0, -14.0, 6.0, 14.0, 95.0, 8.0
+LEVELS_MM = [48.5, 47.5, 46.5, 45.5, 44.5]                    # around the last first-ink height
+DOT_MM = (212.5, 28.1)                                        # located from inked lines in the fixed webcam
+DX, DY, GAP, DASH, HOVER, ABOVE = -26.0, 0.0, 9.0, 10.0, 95.0, 8.0
 CARD_PX = np.array([[890, 878], [972, 838], [1200, 936], [1120, 976]], np.int32)  # card on the riser, MX Brio frame
 
 
