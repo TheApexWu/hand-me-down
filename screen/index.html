@@ -156,6 +156,11 @@
   #live::before { content: ""; display: inline-block; width: .9vh; height: .9vh; border-radius: 50%; background: var(--faint); margin-right: .8vh; vertical-align: .05vh; }
   #live.on { color: var(--mark); } #live.on::before { background: var(--mark); animation: beat 1.2s ease-in-out infinite; }
   #arm { position: absolute; left: 0; right: 0; top: 5vh; height: 52vh; }
+  #cam-wrap { display: none; position: absolute; left: 2.2vh; right: 2.2vh; top: 35vh; height: 30vh; background: #1d1a16; overflow: hidden; }
+  #cam-wrap img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  #cam-wrap span { position: absolute; left: 1vh; top: .9vh; padding: .3vh .7vh; font-size: 1.1vh; letter-spacing: .16em; color: #fff; background: rgba(0, 0, 0, .5); }
+  #machine.cam-on #arm { height: 30vh; }
+  #machine.cam-on #cam-wrap { display: block; }
   #tele { position: absolute; left: 2.2vh; right: 2.2vh; bottom: 2vh; display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.4vh; font-size: 1.15vh; letter-spacing: .12em; color: var(--soft); }
   #tele div { border-top: .12vh solid var(--faint); padding-top: 1vh; }
   #tele b { display: block; margin-top: .6vh; font-size: 2.1vh; letter-spacing: .02em; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -208,6 +213,7 @@
 <aside id="machine"><div class="frame"></div>
   <div class="mhead"><span id="mname"></span><span id="live"></span></div>
   <div id="arm"></div>
+  <div id="cam-wrap"><img id="cam" alt=""><span id="cam-label"></span></div>
   <div id="phase"><span id="phase-k"></span><b id="phase-v"></b></div>
   <div id="tele"></div>
 </aside>
@@ -229,7 +235,7 @@
     house: 'FROM THE HOUSE',
     archive: 'ARCHIVE', archive_line: src => `FROM THE ARCHIVE${src ? `  <b>${src}</b>` : ''}`, archived: n => `${n} ARCHIVE`,
     pen: 'PEN', delivered_at: (t, d) => `DELIVERED <b>${t}</b>  TOOK <b>${d}</b>`, returned: 'RETURNED TO THE STACK',
-    phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
+    camera: 'LIVE CAMERA', phase: 'PHASE', idle: 'AT REST', joints: [['J1', 'PAN', 'shoulder_pan'], ['J2', 'LIFT', 'shoulder_lift'], ['J3', 'ELBOW', 'elbow_flex'], ['J4', 'WRIST', 'wrist_flex'], ['J5', 'ROLL', 'wrist_roll']],
   };
 
   const $ = id => document.getElementById(id);
@@ -551,7 +557,17 @@
 
   addEventListener('resize', () => layoutStack());
 
-  loadStack(); tick(); pose(); requestAnimationFrame(frame);
+  /* the overhead camera, sent by the arm laptop; the panel falls back to the full 3D arm without it */
+  $('cam-label').textContent = LABELS.camera;
+  let camOn = false;
+  const setCam = on => { if (on !== camOn) { camOn = on; $('machine').classList.toggle('cam-on', on); window.dispatchEvent(new Event('resize')); } };
+  function camera() {
+    const next = new Image();
+    next.onload = () => { $('cam').src = next.src; setCam(true); setTimeout(camera, 350); };
+    next.onerror = () => { setCam(false); setTimeout(camera, 1500); };
+    next.src = '/cam.jpg?t=' + Date.now();
+  }
+  loadStack(); tick(); pose(); camera(); requestAnimationFrame(frame);
   setInterval(loadStack, 20000);
 </script>
 </html>

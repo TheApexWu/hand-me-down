@@ -1,4 +1,5 @@
 """The arm laptop sends its pose for the 3D panel; the screen reads it back."""
+import urllib.request
 import json
 import time
 
@@ -38,3 +39,16 @@ def test_the_arm_meshes_are_served_and_nothing_else_from_sim(site):
     assert site.get("/sim/so101/so101.xml")[0] == 404
     assert site.get("/sim/so101/assets/../so101.xml")[0] == 404
     assert site.get("/sim/arm_tools.py")[0] == 404
+
+
+def test_the_camera_frame_is_served_only_while_it_is_fresh(site, monkeypatch):
+    from card import server
+    assert site.call("/cam.jpg")[0] == 404
+    assert site.call("/cam", body={"not": "a jpeg"})[0] == 400
+    frame = b"\xff\xd8 frame"
+    req = urllib.request.Request(site.base + "/cam", data=frame, headers={"Content-Type": "image/jpeg"}, method="POST")
+    assert urllib.request.urlopen(req, timeout=5).status == 200
+    status, body, headers = site.call("/cam.jpg")
+    assert status == 200 and body == frame and headers["Content-Type"] == "image/jpeg"
+    monkeypatch.setattr(server, "CAM_STALE_S", -1)
+    assert site.call("/cam.jpg")[0] == 404

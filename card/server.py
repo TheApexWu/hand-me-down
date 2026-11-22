@@ -28,6 +28,7 @@ from . import bank, jobs, read_card, store, visit
 from . import layout as lay
 from .quote import words as norm_words
 
+CAM_STALE_S, CAM_MAX_BYTES = 3.0, 400_000
 DEMO_HOLD_S = 3.0   # how long the demo button leaves the read card on screen before the chooser answers
 
 WEB = Path(__file__).parent / "web"
@@ -138,6 +139,7 @@ class App:
     token = None           # set by --lan: a request from another machine must carry it
     trust_loopback = True  # tests turn this off to play the part of another machine
     sim = False            # the operator's switch: the arm is offline, play the simulation clip
+    cam, cam_t = None, 0.0  # the newest overhead frame the arm laptop sent (POST /cam), for the screen
     pose = {}              # the arm's last pose, as the arm laptop sent it (POST /pose), for the 3D panel
 
     def __init__(self, camera_spec=None, use_camera=True, image=None, reducto_call=None):
@@ -550,6 +552,10 @@ def make_handler(app):
                 return self.send(app.stack())
             if path == "/pose.json":
                 return self.send(app.pose)
+            if path == "/cam.jpg":
+                if not app.cam or time.time() - app.cam_t > CAM_STALE_S:
+                    return self.send({"error": "no live frame"}, code=404)
+                return self.send(app.cam, "image/jpeg")
             if path.startswith("/sim/so101/assets/") and name.lower().endswith(".stl"):
                 target = (store.ROOT / "sim" / "so101" / "assets" / name).resolve()
                 if target.parent == (store.ROOT / "sim" / "so101" / "assets").resolve() and target.is_file():
@@ -602,6 +608,12 @@ def make_handler(app):
             url = urlparse(self.path)
             path, query = url.path, parse_qs(url.query)
             length = int(self.headers.get("Content-Length") or 0)
+            if path == "/cam":      # one JPEG from the arm laptop's overhead camera
+                data = self.rfile.read(length) if 0 < length <= CAM_MAX_BYTES else b""
+                if not data.startswith(b"\xff\xd8"):
+                    return self.send({"error": "expected one JPEG"}, code=400)
+                app.cam, app.cam_t = data, time.time()
+                return self.send({"ok": True})
             if length > 65536:
                 return self.send({"error": "too large"}, code=413)
             try:
