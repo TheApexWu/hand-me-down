@@ -38,6 +38,16 @@ Updated Sun 22 Nov 2026, 12:54. Arm code is on `alex/arm-pen`. The arm stays on 
 - A committed `tick: null` makes every card private. Mark the tick box before testing the real rail.
 - If the arm refuses a job, the operator sees NO REPLY after about 225 s, but the visitor screen stays on "writing". Add a timeout state there.
 
+## Dashboard with the live 3D arm
+
+The public screen should show each card's journey and a live 3D view of the arm.
+
+- Keep `screen/index.html` as the main display and `/op` as the operator page.
+- Add a token-protected `POST /pose` and a read route `GET /pose.json`. Body: `{"pos": {"shoulder_pan": deg, "shoulder_lift": deg, "elbow_flex": deg, "wrist_flex": deg, "wrist_roll": deg}, "phase": "write:031", "t": unix_seconds}`.
+- Render it in the browser on the card laptop with three.js, using the meshes in `sim/so101/` and the box and card from `sim/defaults.json`. Joint degrees use the model's zero with signs +1.
+- If no pose arrives for 2 s, label the panel ARM OFFLINE. The recorded clip must stay labeled SIMULATION.
+- The arm side will add the pose sender once this route exists.
+
 ## Arm laptop start order
 
 Only start the worker with someone at the arm. It moves the pen as soon as a job arrives.
