@@ -23,6 +23,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import cv2
+import numpy as np
 
 from . import bank, jobs, read_card, store, visit
 from . import layout as lay
@@ -139,7 +140,7 @@ class App:
     token = None           # set by --lan: a request from another machine must carry it
     trust_loopback = True  # tests turn this off to play the part of another machine
     sim = False            # the operator's switch: the arm is offline, play the simulation clip
-    cam, cam_t = None, 0.0  # the newest overhead frame the arm laptop sent (POST /cam), for the screen
+    overhead, overhead_t = None, 0.0  # the newest overhead frame the arm laptop sent (POST /cam), for the screen
     pose = {}              # the arm's last pose, as the arm laptop sent it (POST /pose), for the 3D panel
 
     def __init__(self, camera_spec=None, use_camera=True, image=None, reducto_call=None):
@@ -155,9 +156,10 @@ class App:
 
     def cam(self):
         if self.camera is None and self.use_camera and not self.image:
-            from .capture import Camera
+            from .capture import Camera, RemoteCamera, is_remote
             try:
-                self.camera, self.camera_error = Camera(self.camera_spec), None
+                self.camera = RemoteCamera() if is_remote(self.camera_spec) else Camera(self.camera_spec)
+                self.camera_error = None
             except Exception as exc:
                 self.camera_error = str(exc)
         return self.camera
@@ -553,9 +555,9 @@ def make_handler(app):
             if path == "/pose.json":
                 return self.send(app.pose)
             if path == "/cam.jpg":
-                if not app.cam or time.time() - app.cam_t > CAM_STALE_S:
+                if not app.overhead or time.time() - app.overhead_t > CAM_STALE_S:
                     return self.send({"error": "no live frame"}, code=404)
-                return self.send(app.cam, "image/jpeg")
+                return self.send(app.overhead, "image/jpeg")
             if path.startswith("/sim/so101/assets/") and name.lower().endswith(".stl"):
                 target = (store.ROOT / "sim" / "so101" / "assets" / name).resolve()
                 if target.parent == (store.ROOT / "sim" / "so101" / "assets").resolve() and target.is_file():
@@ -612,7 +614,19 @@ def make_handler(app):
                 data = self.rfile.read(length) if 0 < length <= CAM_MAX_BYTES else b""
                 if not data.startswith(b"\xff\xd8"):
                     return self.send({"error": "expected one JPEG"}, code=400)
-                app.cam, app.cam_t = data, time.time()
+                app.overhead, app.overhead_t = data, time.time()
+                return self.send({"ok": True})
+            if path == "/eye":   # the card eye on another machine (card/eye_push.py): one JPEG per request
+                from .capture import RemoteCamera
+                cam = app.cam()
+                if not isinstance(cam, RemoteCamera):
+                    return self.send({"error": "this server reads its own camera; start it with --camera remote"}, code=409)
+                if not 0 < length <= 16_000_000:
+                    return self.send({"error": "send one JPEG of up to 16 MB"}, code=413)
+                frame = cv2.imdecode(np.frombuffer(self.rfile.read(length), np.uint8), cv2.IMREAD_COLOR)
+                if frame is None:
+                    return self.send({"error": "not a JPEG"}, code=400)
+                cam.push(frame, self.headers.get("X-HMD-Camera"))
                 return self.send({"ok": True})
             if length > 65536:
                 return self.send({"error": "too large"}, code=413)
@@ -737,6 +751,9 @@ def serve(port=8040, lan=False, camera_spec=None, use_camera=True, image=None, o
         print("LAN on. Other machines need the token on every request:")
         print(f"  arm laptop      python card/arm_sync.py --host {ip} --port {port} --token {app.token}")
         print(f"  second display  http://{ip}:{port}/?token={app.token}")
+        from .capture import is_remote
+        if use_camera and not image and is_remote(camera_spec):
+            print(f"  card eye        python card/eye_push.py --host {ip} --port {port} --token {app.token} --camera 0")
     threading.Thread(target=app.cam, daemon=True).start()  # warm the camera
     threading.Thread(target=app.watch_done, daemon=True).start()
     if open_page:

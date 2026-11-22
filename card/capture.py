@@ -3,6 +3,7 @@
 The camera comes from card/layout.json ("camera": an index or part of a name; the
 HMD_CAMERA environment variable overrides it), so a replug can't swap it for the
 laptop's. A thread keeps it open; capture() returns the sharpest of three fresh frames.
+"remote" means the webcam is on another machine, which sends its frames (card/eye_push.py).
 
   python -m card.capture        Enter saves cards/NNN.jpg + NNN_card.jpg, q quits
 """
@@ -113,6 +114,49 @@ class Camera:
         self.alive = False
         time.sleep(0.1)
         self.cap.release()
+
+
+def is_remote(spec=None):
+    """True when the card eye is a webcam on another machine (camera "remote"): see RemoteCamera."""
+    return str(spec if spec is not None else os.environ.get("HMD_CAMERA") or lay.load()["camera"]).strip().lower() == "remote"
+
+
+class RemoteCamera(Camera):
+    """The card eye when the webcam is plugged into another machine. card/eye_push.py there sends
+    its frames to POST /eye on this server (with the LAN token). The rest of the server can't tell
+    it from a webcam of its own: the preview, capture and the layout tool all work the same."""
+    STALE_S = 5.0
+
+    def __init__(self, name="card eye (another machine)"):   # nothing to open on this machine
+        self.index, self.name = None, name
+        self.frame, self.count, self.at = None, 0, 0.0
+        self.lock = threading.Lock()
+        self.alive = True
+
+    @property
+    def error(self):
+        if self.frame is None:
+            return "waiting for the card eye: run card/eye_push.py on the machine with the webcam"
+        quiet = time.time() - self.at
+        return f"no frames from {self.name} for {quiet:.0f} s" if quiet > self.STALE_S else None
+
+    @error.setter
+    def error(self, value):   # worked out from the frames, not set
+        pass
+
+    def push(self, frame, name=None):
+        with self.lock:
+            self.frame, self.count, self.at = frame, self.count + 1, time.time()
+        if name:
+            self.name = str(name)[:60]
+
+    def capture(self, n=3):
+        if self.error:   # never read an old picture as if it were the card on the slot now
+            raise RuntimeError(self.error)
+        return super().capture(n)
+
+    def close(self):
+        self.alive = False
 
 
 class Recorder:

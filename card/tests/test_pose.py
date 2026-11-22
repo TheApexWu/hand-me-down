@@ -48,6 +48,7 @@ def test_the_camera_frame_is_served_only_while_it_is_fresh(site, monkeypatch):
     frame = b"\xff\xd8 frame"
     req = urllib.request.Request(site.base + "/cam", data=frame, headers={"Content-Type": "image/jpeg"}, method="POST")
     assert urllib.request.urlopen(req, timeout=5).status == 200
+    assert callable(site.app.cam)                                   # the frame must not replace the camera getter
     status, body, headers = site.call("/cam.jpg")
     assert status == 200 and body == frame and headers["Content-Type"] == "image/jpeg"
     monkeypatch.setattr(server, "CAM_STALE_S", -1)
