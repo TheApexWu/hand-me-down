@@ -1,6 +1,6 @@
 # Arm Status
 
-Updated Sun 22 Nov 2026, 13:56. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
+Updated Sun 22 Nov 2026, 14:03. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
 
 ## Working
 
@@ -30,6 +30,8 @@ For the arm-offline switch: `git show origin/alex/arm-pen:docs/hand-me-down-sim-
 ## Card gate and the three Hermes roles
 
 `card/gate.py` screens a card before it can join the rail. It can hold a card for a person and never rejects one.
+
+Wired on branch `alex/card-gate` at `1c69942`, ready for the card side to merge. Until the container has a no-tools `gate` profile, every card is held.
 
 1. **Gate Hermes:** no tools. Labels each card ok, self_harm, threat, hate, sexual or private_info. Any failure holds the card.
 2. **Chooser Hermes:** only `give`. Picks an exact short phrase from a card that passed.
