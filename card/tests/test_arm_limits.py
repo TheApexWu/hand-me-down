@@ -26,23 +26,30 @@ def test_the_rules_mirror_the_arm():
     assert jobs.cannot_write("   ") == "there are no words to write"
 
 
-def test_a_line_too_long_for_the_arm_never_reaches_the_rail(card_photo):
+def test_a_long_card_is_fine_in_quote_mode_because_only_a_phrase_is_written(card_photo):
     card = seed(card_photo, LONG)
-    assert card["status"] == "unwritable" and "75 characters" in card["cannot_write"] and store.waiting() == []
+    assert card["status"] == "waiting" and all(len(p) <= 16 for p in card["phrases"])
+    _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("anything at all"), is_online=True)
+    assert job["card_no"] == card["card_no"] and job["line"] == LONG
+    assert len(job["quote"]) <= 16 and len(job["quote"].split()) <= 3 and job["quote"] in card["phrases"]
+
+
+def test_a_card_with_no_phrase_the_arm_can_write_never_reaches_the_rail(card_photo):
+    card = seed(card_photo, "antidisestablishmentarianism notwithstanding")
+    assert card["status"] == "unwritable" and "no phrase" in card["cannot_write"] and store.waiting() == []
     short = seed(card_photo, "keeps the porch light on")
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("anything at all"), is_online=True)
-    assert job["card_no"] == short["card_no"]                       # the long one is never given
-    assert not jobs.job_file(card["card_no"]).exists()
+    assert job["card_no"] == short["card_no"]                       # the one with no phrase is never given
     with pytest.raises(jobs.NoJob):                                 # and nothing can write a job for it
         jobs.write({"card_no": card["card_no"], "quote": None, "picked_by": "rule", "why": None, "misses": 0, "secs": 0},
                    store.load_card(short["card_no"]))
 
 
-def test_shortening_or_correcting_the_line_puts_the_card_on_the_rail(card_photo):
-    card = seed(card_photo, "with love ❤")
+def test_correcting_the_line_can_put_the_card_on_the_rail(card_photo):
+    card = seed(card_photo, "love❤ hugs❤ always❤")                   # every phrase has a mark the pen cannot draw
     assert card["status"] == "unwritable"
-    fixed = visit.fix_line(store.load_card(card["card_no"]), "with love")
-    assert fixed["status"] == "waiting" and "cannot_write" not in fixed
+    fixed = visit.fix_line(store.load_card(card["card_no"]), "with love always")
+    assert fixed["status"] == "waiting" and "cannot_write" not in fixed and "with love" in fixed["phrases"]
 
 
 def test_no_job_is_written_for_the_placeholder_house_line(card_photo):

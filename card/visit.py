@@ -1,7 +1,7 @@
 """One visit: card photo -> Reducto -> (confirm) -> pick -> jobs/NNN.json for the arm."""
 import time
 
-from . import jobs, pick, read_card, store
+from . import jobs, pick, quotes, read_card, store
 from .capture import read_image, save_card_photo
 
 
@@ -52,11 +52,12 @@ def shelve(card):
         card["status"] = "unread"
     elif not card.get("checked"):
         card["status"] = "unchecked"   # waits for a person to compare the read with the handwriting
-    elif jobs.cannot_write(card["line"]):
-        # too long for the arm, or a character its pen can't draw: it would only ever be refused
-        card["status"], card["cannot_write"] = "unwritable", jobs.cannot_write(card["line"])
+    elif quotes.cannot_give(card):
+        # quote mode: no phrase short enough for the arm, so it could only ever be refused
+        card["status"], card["cannot_write"] = "unwritable", quotes.cannot_give(card)
     else:
         card["status"] = "waiting"
+    card["phrases"] = [p["text"] for p in quotes.phrases(card)] if card.get("line") else []
     return store.save_card(card)
 
 

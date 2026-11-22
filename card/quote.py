@@ -31,10 +31,17 @@ def judge_give(turn, card, quote):
     if turn.get("closed"):
         return None, "this turn is over"
     cid = store.norm_id(card)
-    text = turn["candidates"].get(cid)
-    if text is None:
+    allowed = turn["candidates"].get(cid)
+    if allowed is None:
         reason = f"card {cid} is not on the rail; choose from {sorted(turn['candidates'])}"
-    elif not quote_on_card(quote, text):
+    elif isinstance(allowed, list):   # quote mode: one of the card's listed phrases, exactly
+        key = " ".join(words(quote))
+        match = next((p for p in allowed if key and " ".join(words(p)) == key), None)
+        if match:
+            turn["closed"] = True
+            return {"turn": turn["turn"], "card": cid, "quote": match, "by": "hermes"}, "given"
+        reason = f"that is not one of the phrases listed for card {cid}; give one of them exactly as listed"
+    elif not quote_on_card(quote, allowed):
         reason = (f"those words are not on card {cid}; quote at least {MIN_WORDS} "
                   "consecutive words exactly as written on it")
     else:

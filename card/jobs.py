@@ -12,40 +12,30 @@ In trace mode crop is cards/NNN_trace.png: the same cut in grey with shadows and
 rules removed, because that is what the tracer needs. The screen shows the untouched cut.
 House-line jobs have no card: they are numbered from 900 and are always mode "font".
 
+Quote mode: for a stranger's card the arm writes only `quote`, an exact phrase of 2 or 3 words
+from one written row of that card, at most 16 characters (card/quotes.py); `line` keeps the whole
+card. House-line and typed test jobs still have the arm write `line`.
+
 A job the arm refuses gets no done file and leaves the screen waiting, so nothing the arm is
-known to refuse is written at all: a line over the length it fits, a character its pen font
-lacks, the placeholder house line (cannot_write, below).
+known to refuse is written at all: a quote over its limit, a line over the length it fits (for
+house and test jobs), a character its pen font lacks, the placeholder house line.
 """
 import statistics
 import time
-import unicodedata
 
 from . import layout as lay
-from . import store
+from . import quotes, store
+from .pen import MAX_QUOTE_CHARS, MAX_QUOTE_WORDS, pen_text
 
 HOUSE_FROM = 900
-
-# The arm's own clean-up of a line, mirrored from sim/arm_worker.py (clean) at 45f5dd5: it swaps
-# these, drops accents, and then refuses anything that is not plain printable ASCII.
-TYPOGRAPHY = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": "-",
-              "\u2026": "...", "\u00a0": " ", "~": "-"}
 
 
 class NoJob(Exception):
     """There is nothing the arm could write for this visitor. The message says why."""
 
 
-def pen_text(text):
-    """The line as the arm's pen font will see it, and the characters it has no glyph for."""
-    for a, b in TYPOGRAPHY.items():
-        text = (text or "").replace(a, b)
-    text = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
-    text = " ".join(text.split())
-    return text, sorted({c for c in text if c != " " and not 32 < ord(c) < 126})
-
-
 def cannot_write(line, layout=None):
-    """Why the arm would refuse this line, or None if it can write it."""
+    """Why the arm would refuse to write this whole line (house and test jobs), or None."""
     layout = layout or lay.load()
     text, missing = pen_text(line)
     if not text:
@@ -76,9 +66,15 @@ def write(pick, visitor, layout=None):
         n = stranger["card_no"]
         if not stranger.get("checked"):
             raise NoJob(f"card {store.nnn(n)}'s read has not been checked by a person")
-        problem = cannot_write(stranger["line"], layout)
+        problem = quotes.cannot_give(stranger)
         if problem:
-            raise NoJob(f"card {store.nnn(n)} can't be written: {problem}")
+            raise NoJob(f"card {store.nnn(n)} can't be given: {problem}")
+        phrase = quotes.find(stranger, pick["quote"]) if pick["quote"] else quotes.default(stranger)
+        if not phrase:   # a chosen quote that isn't one of the card's phrases never reaches the arm
+            raise NoJob(f"{pick['quote']!r} is not a phrase card {store.nnn(n)} can give")
+        quote, missing = pen_text(phrase["text"])
+        if missing or len(quote.split()) > MAX_QUOTE_WORDS or len(quote) > MAX_QUOTE_CHARS:
+            raise NoJob(f"{quote!r} is over the arm's quote limit")
         mode, trace, crop = "font", None, stranger.get("crop")
         to_trace = stranger.get("trace_img") or stranger.get("crop")
         if layout["mode"] == "trace" and layout.get("arm_traces") and to_trace:
@@ -91,7 +87,7 @@ def write(pick, visitor, layout=None):
             if ok:
                 mode, crop = "trace", to_trace   # in trace mode the arm traces `crop`: give it the cleaned cut
         job = {"card_no": n, "line": stranger["line"], "crop": crop, "bbox": stranger.get("bbox"),
-               "quote": pick["quote"], "picked_by": pick["picked_by"], "written_at": stranger["written_at"],
+               "quote": quote, "quote_box": phrase["box"], "picked_by": pick["picked_by"], "written_at": stranger["written_at"],
                "mode": mode, "trace": trace,
                "card_img": stranger.get("card_img"), "name": stranger.get("name") or None,
                "ok_to_show": stranger.get("ok_to_show")}

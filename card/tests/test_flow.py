@@ -25,11 +25,11 @@ def seed(card_photo, *lines):
 def test_job_matches_the_contract(card_photo):
     seed(card_photo, LEAVING, FORGIVEN)
     card, job = visit.run(file=card_photo("v", "v"), call=reducto_says("was let off the hook"),
-                          cmd=calls(["002", "been forgiven and"]), is_online=True)
+                          cmd=calls(["002", "been forgiven"]), is_online=True)
     on_disk = store.read_json(store.BASE / "jobs" / "002.json")
     assert on_disk == job
     assert {k: job[k] for k in ("card_no", "line", "crop", "quote", "picked_by", "mode")} == {
-        "card_no": 2, "line": FORGIVEN, "crop": "cards/002_line.png", "quote": "been forgiven and",
+        "card_no": 2, "line": FORGIVEN, "crop": "cards/002_line.png", "quote": "been forgiven",
         "picked_by": "hermes", "mode": "font"}
     assert len(job["bbox"]) == 4 and all(0 <= v <= 1 for v in job["bbox"])
     assert len(job["written_at"]) == 5 and job["written_at"][2] == ":"
@@ -46,8 +46,8 @@ def test_a_second_give_after_the_gift_changes_nothing(card_photo):
     """A model that calls give again after it has given must not undo, or replace, the gift."""
     seed(card_photo, LEAVING, FORGIVEN)
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("was let off the hook"), is_online=True,
-                       cmd=calls(["002", "been forgiven and"], ["001", "is leaving and"], ["002", "made up words"]))
-    assert job["picked_by"] == "hermes" and job["card_no"] == 2 and job["quote"] == "been forgiven and"
+                       cmd=calls(["002", "been forgiven"], ["001", "is leaving and"], ["002", "made up words"]))
+    assert job["picked_by"] == "hermes" and job["card_no"] == 2 and job["quote"] == "been forgiven"
     assert job["misses"] == 0 and store.load_card(1)["status"] == "waiting"
 
 
@@ -67,7 +67,8 @@ def test_two_bad_quotes_fall_back_to_the_longest_waiting_card(card_photo):
     seed(card_photo, LEAVING, FORGIVEN)
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("anything"), is_online=True,
                        cmd=calls(["002", "is leaving and"], ["002", "made up words"]))
-    assert job["picked_by"] == "rule" and job["card_no"] == 1 and job["misses"] == 2 and job["quote"] is None
+    assert job["picked_by"] == "rule" and job["card_no"] == 1 and job["misses"] == 2
+    assert job["quote"] == "is leaving and"          # a pick by rule still carries a phrase, never the whole card
 
 
 def test_late_model_falls_back_and_cannot_give_afterwards(card_photo):
@@ -105,13 +106,13 @@ def test_reads_and_picks_replay_from_cache_with_the_network_off(card_photo):
     seed(card_photo, LEAVING, FORGIVEN)
     photo = card_photo("v", "v")
     _, first = visit.run(file=photo, call=reducto_says("was let off the hook"),
-                         cmd=calls(["002", "been forgiven and"]), is_online=True)
+                         cmd=calls(["002", "been forgiven"]), is_online=True)
     assert first["picked_by"] == "hermes"
     visit.ungive(first)                                   # same rail as before
     visit.discard(store.load_card(first["visitor_no"]))
     card, again = visit.run(file=photo, call=reducto_says(None), is_online=False)
     assert card["line"] == "was let off the hook" and card["read_source"] == "cache"
-    assert again["picked_by"] == "offline" and again["card_no"] == 2 and again["quote"] == "been forgiven and"
+    assert again["picked_by"] == "offline" and again["card_no"] == 2 and again["quote"] == "been forgiven"
 
 
 def test_words_go_to_fields_by_position(card_photo):
