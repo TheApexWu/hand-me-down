@@ -23,6 +23,7 @@ RATE, FLOOR_MM, PEN_MM, MAX_STEP_DEG = 50, 35.0, 68.0, 1.2
 LIFT_OFF_DEG = 25.0                                           # shoulder back: clears the card at any height
 J = pg.JOINTS
 LIMITED = [j for j in J if j in LIMITS_DEG]                   # the rig sets no limit on wrist_roll
+RELAX = ["shoulder_lift", "elbow_flex"]
 ALIAS = {"pan": "shoulder_pan", "lift": "shoulder_lift", "elbow": "elbow_flex", "wrist": "wrist_flex",
          "roll": "wrist_roll"}
 
@@ -61,6 +62,7 @@ class Server:
         # moves start from the last goal: starting from present banks gravity sag on every command
         self.goal = from_motor({j: float(v) for j, v in r.bus.sync_read("Goal_Position", J).items()})
         self.heat = deque(maxlen=3)
+        self.relaxed = False
 
     def z(self, q):
         return float(self.pen.tip({**q, "gripper": 0.0})[2]) * 1000
@@ -107,7 +109,7 @@ class Server:
     def state(self):
         return {"ok": True, "moving": bool(self.q), "left_s": round(len(self.q) / RATE, 2), "phase": self.phase,
                 "pos": {k: round(v, 2) for k, v in self.pos.items()}, "tip_z_mm": round(self.z(self.pos), 1),
-                "temps": self.temps, "last_stop": self.last_stop}
+                "temps": self.temps, "last_stop": self.last_stop, "relaxed": self.relaxed}
 
     def handle(self, m):
         c = m.get("c")
@@ -119,6 +121,25 @@ class Server:
         if c == "quit":
             self.running = False
             return {"ok": True}
+        if c == "relax":                                      # big joints only: the claw keeps its grip on the pen
+            if self.q:
+                raise Refused("arm is moving: send stop first")
+            for limit in (600, 400, 250, 120, 40):
+                for j in RELAX:
+                    self.r.bus.write("Torque_Limit", j, limit, normalize=False)
+                time.sleep(0.3)
+            self.r.bus.disable_torque(RELAX)
+            self.relaxed = True
+            return self.state()
+        if c == "wake":
+            self.pos = read(self.r)
+            self.goal = dict(self.pos)
+            self.r.bus.sync_write("Goal_Position", to_motor(self.pos))
+            for j in RELAX:
+                self.r.bus.write("Torque_Limit", j, pg.TORQUE, normalize=False)
+            self.r.bus.enable_torque(RELAX)
+            self.relaxed = False
+            return self.state()
         if c == "save":
             poses = json.loads(pg.POSES.read_text()) if pg.POSES.exists() else {}
             poses[m["name"]] = {"reached_deg": dict(self.pos)}
@@ -126,6 +147,8 @@ class Server:
             tmp.write_text(json.dumps(poses, indent=2))
             os.replace(tmp, pg.POSES)
             return self.state()
+        if self.relaxed:
+            raise Refused("arm is relaxed: send wake first")
         if self.q:
             raise Refused("arm is moving: send stop first")
         if c == "gains":
