@@ -13,7 +13,7 @@ rules removed, because that is what the tracer needs. The screen shows the untou
 House-line jobs have no card: they are numbered from 900 and are always mode "font".
 
 Quote mode: for a stranger's card the arm writes only `quote`, an exact phrase of 2 or 3 words
-from one written row of that card, at most 16 characters (card/quotes.py); `line` keeps the whole
+from one written row of that card, at most 40 characters (card/quotes.py); `line` keeps the whole
 card. House-line and typed test jobs still have the arm write `line`.
 
 Every job says where its words came from: "provenance" is "visitor" (a stranger's handwritten
@@ -30,7 +30,7 @@ import time
 
 from . import bank, quotes, store
 from . import layout as lay
-from .pen import MAX_QUOTE_CHARS, MAX_QUOTE_WORDS, pen_text
+from .pen import MAX_QUOTE_CHARS, MAX_QUOTE_WORDS, pen_text, without_end_marks
 
 HOUSE_FROM = 900
 
@@ -77,7 +77,7 @@ def write(pick, visitor, layout=None):
         phrase = quotes.find(stranger, pick["quote"]) if pick["quote"] else quotes.default(stranger)
         if not phrase:   # a chosen quote that isn't one of the card's phrases never reaches the arm
             raise NoJob(f"{pick['quote']!r} is not a phrase card {store.nnn(n)} can give")
-        quote, missing = pen_text(phrase["text"])
+        quote, missing = pen_text(without_end_marks(phrase["text"]))
         if missing or len(quote.split()) > MAX_QUOTE_WORDS or len(quote) > MAX_QUOTE_CHARS:
             raise NoJob(f"{quote!r} is over the arm's quote limit")
         mode, trace, crop = "font", None, stranger.get("crop")

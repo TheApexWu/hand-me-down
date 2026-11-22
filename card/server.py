@@ -28,6 +28,8 @@ from . import bank, jobs, read_card, store, visit
 from . import layout as lay
 from .quote import words as norm_words
 
+DEMO_HOLD_S = 3.0   # how long the demo button leaves the read card on screen before the chooser answers
+
 WEB = Path(__file__).parent / "web"
 SCREEN = store.ROOT / "screen" / "index.html"
 # Shown, labeled SIMULATION, when the operator says the arm is offline. Not in the repo (*.mp4 is ignored).
@@ -186,7 +188,7 @@ class App:
 
     # jobs ----------------------------------------------------------------
 
-    def capture(self, seed=False, file=None):
+    def capture(self, seed=False, file=None, show=False):
         frame = None
         if not file and self.image:
             file = self.image
@@ -212,9 +214,24 @@ class App:
         self.visitor, self.job = card["card_no"], None
         if card.get("may_show"):
             # the public screen never shows the visitor's own card: only that it was read, and how fast
-            store.set_state(stage="confirm", words=len(card.get("words") or []), read_secs=card.get("read_secs"))
+            mine = self.screen_card(card, "mine") if show else {}   # only the demo button shows it
+            store.set_state(stage="confirm", words=len(card.get("words") or []), read_secs=card.get("read_secs"), **mine)
         else:  # not OK to show: nothing of this card goes on the screen, so there is nothing to confirm
             self.choose(card)
+
+    def demo(self, file=None):
+        """One press with the team's own card: read it, show it, let the chooser answer, send the job.
+        A held card still stops here, and this card stays off the rail until a person checks it."""
+        self.capture(file=file, show=True)
+        if store.state().get("stage") != "confirm":
+            return
+        time.sleep(DEMO_HOLD_S)
+        mine = self.visitor
+        self.confirm(True)
+        card = store.load_card(mine)
+        if card and card.get("status") == "waiting":    # the team's own vent is never handed to the next run
+            card["status"] = "demo"
+            store.save_card(card)
 
     def confirm(self, yes, approve=False, text=None):
         """The visitor says the cut is their line (yes), or asks for a retake. approve is the operator's
@@ -622,6 +639,9 @@ def make_handler(app):
                 seed = str(arg("seed")) in ("1", "true", "True")
                 file = arg("file")
                 ok = app.start(lambda: app.capture(seed=seed, file=file))
+            elif path == "/api/demo":
+                file = arg("file")
+                ok = app.start(lambda: app.demo(file=file))
             elif path == "/api/confirm":
                 yes, approve = (str(arg(k)) in ("1", "true", "True") for k in ("yes", "approve"))
                 text = arg("text")

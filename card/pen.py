@@ -7,7 +7,12 @@ TYPOGRAPHY = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—":
               "…": "...", " ": " ", "~": "-"}
 
 # Quote mode (ARM_STATUS.md, 22 Nov 13:43): a stranger's card is written as a short quote only.
-MAX_QUOTE_WORDS, MAX_QUOTE_CHARS = 3, 16
+MAX_QUOTE_WORDS, MAX_QUOTE_CHARS = 3, 40
+
+
+def without_end_marks(text):
+    """Tiny lifted marks are the pen's hardest move, so a quote is inked as its words only."""
+    return " ".join(w for w in (w.rstrip("!?.,;:") for w in text.split()) if w)
 
 
 def pen_text(text):
