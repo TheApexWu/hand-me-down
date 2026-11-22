@@ -8,12 +8,14 @@
 Nothing here is measured yet. Set it with:  python -m card layout
 """
 import json
+import os
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-FILE = Path(__file__).parent / "layout.json"
+# HMD_LAYOUT points a dry run at its own layout file; the real one sits next to this module.
+FILE = Path(os.environ.get("HMD_LAYOUT") or Path(__file__).parent / "layout.json")
 CARD_PX = 1600  # width of the squared-up card image
 
 DEFAULT = {

@@ -41,6 +41,13 @@
   #postmark { position: fixed; right: 5vw; bottom: 6vh; width: 150px; height: 150px; opacity: 0; transform: rotate(-9deg) scale(1.15); transition: opacity .5s, transform .5s; color: var(--mark); }
   .delivered #postmark { opacity: .8; transform: rotate(-9deg); }
   #postmark text { font: 600 15px ui-monospace, Menlo, monospace; fill: currentColor; letter-spacing: .08em; }
+  /* arm offline: the operator's switch plays a simulation clip. It is always labeled as one. */
+  #sim { position: fixed; inset: 0; background: #111; display: none; align-items: center; justify-content: center; z-index: 10; }
+  .sim-on #sim { display: flex; }
+  #sim video { max-width: 100%; max-height: 100%; }
+  #sim .label { position: absolute; left: 0; right: 0; top: 0; padding: 14px 0; text-align: center; background: #f2c200; color: #111;
+                font: 800 clamp(28px, 5vw, 64px)/1.1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .22em; }
+  #sim .label.foot { top: auto; bottom: 0; }
 </style>
 <main id="m" class="solo">
   <figure><div class="crop" id="yours"><img alt=""></div><div class="under"></div></figure>
@@ -61,6 +68,8 @@
   <text id="pm-b" x="75" y="104" text-anchor="middle"></text>
   <text id="pm-c" x="75" y="124" text-anchor="middle" style="font-size:11px"></text>
 </svg>
+<div id="sim"><video id="sim-video" muted playsinline loop preload="none"></video>
+  <div class="label">SIMULATION</div><div class="label foot">SIMULATION</div></div>
 <script>
   const $ = id => document.getElementById(id), m = $('m');
   let seen = null, st = {};
@@ -89,7 +98,10 @@
       if (s.v !== seen) {
         seen = s.v; st = s;
         const pair = (s.stage === 'writing' || s.stage === 'delivered') && s.stranger;
-        document.body.className = s.stage;
+        document.body.className = s.stage + (s.sim ? ' sim-on' : '');
+        const clip = $('sim-video');
+        if (s.sim && clip.paused) { if (!clip.src) clip.src = '/sim.mp4'; clip.currentTime = 0; clip.play().catch(() => {}); }
+        if (!s.sim && !clip.paused) clip.pause();
         m.className = (pair ? 'pair' : 'solo') + (s.by ? ' by-' + s.by : '');
         const marks = s.marks || {};
         show($('yours'), ['confirm', 'choosing', 'writing', 'delivered'].includes(s.stage) ? s.visitor : null, pair ? marks.visitor : [], s.v);

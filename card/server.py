@@ -28,6 +28,8 @@ from .quote import words as norm_words
 
 WEB = Path(__file__).parent / "web"
 SCREEN = store.ROOT / "screen" / "index.html"
+# Shown, labeled SIMULATION, when the operator says the arm is offline. Not in the repo (*.mp4 is ignored).
+SIM_CLIP = Path(os.environ.get("HMD_SIM_CLIP") or store.ROOT / "screen" / "sim-demo.mp4")
 
 
 def to_crop(box, rect):
@@ -75,6 +77,7 @@ def lan_token():
 class App:
     token = None           # set by --lan: a request from another machine must carry it
     trust_loopback = True  # tests turn this off to play the part of another machine
+    sim = False            # the operator's switch: the arm is offline, play the simulation clip
 
     def __init__(self, camera_spec=None, use_camera=True, image=None, reducto_call=None):
         self.camera, self.camera_spec, self.use_camera = None, camera_spec, use_camera
@@ -220,6 +223,14 @@ class App:
             self.recorder.stop()
             self.recorder = None
 
+    def set_sim(self, on):
+        """Arm offline: the screen plays the simulation clip, labeled as one. Returns an error or None."""
+        if on and not SIM_CLIP.is_file():
+            return f"no simulation clip at {store.rel(SIM_CLIP)}"
+        self.sim = bool(on)
+        store.set_state(**store.state())  # same state, new version: the screen redraws
+        return None
+
     def status(self):
         def brief(c):
             if not c.get("may_show"):  # private: not even the operator page shows its words
@@ -242,6 +253,8 @@ class App:
             "private": sum(c.get("status") == "private" for c in cards),
             "layout": layout, "layout_measured": lay.measured(layout),
             "recording": str(self.recorder.path.name) if self.recorder else None,
+            "sim": self.sim, "sim_clip": store.rel(SIM_CLIP) if SIM_CLIP.is_file() else None,
+            "sim_clip_wanted": store.rel(SIM_CLIP),
         }
 
 
@@ -292,6 +305,36 @@ def make_handler(app):
                      ".html": "text/html; charset=utf-8"}
             self.send(path.read_bytes(), ctype or types.get(path.suffix, "application/octet-stream"))
 
+        def send_video(self, path):
+            """An .mp4 with byte ranges, which browsers ask for before they will play or seek."""
+            if not Path(path).is_file():
+                return self.send({"error": "not found"}, code=404)
+            data = Path(path).read_bytes()
+            start, end, code = 0, len(data) - 1, 200
+            rng = self.headers.get("Range") or ""
+            if rng.startswith("bytes="):
+                first, _, last = rng[6:].split(",")[0].partition("-")
+                try:
+                    start = int(first) if first else max(0, len(data) - int(last))
+                    end = min(int(last), len(data) - 1) if first and last else len(data) - 1
+                except ValueError:
+                    start, end = 0, len(data) - 1
+                if start > end or start >= len(data):
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{len(data)}")
+                    self.end_headers()
+                    return
+                code = 206
+            body = data[start:end + 1]
+            self.send_response(code)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(len(body)))
+            if code == 206:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{len(data)}")
+            self.end_headers()
+            self.wfile.write(body)
+
         def send_jpeg(self, img, width=None, quality=80):
             if img is None:
                 return self.send({"error": "no frame"}, code=503)
@@ -307,7 +350,9 @@ def make_handler(app):
             if path == "/":
                 return self.send_file(SCREEN)
             if path == "/state.json":
-                return self.send(store.state())
+                return self.send({**store.state(), "sim": app.sim})
+            if path == "/sim.mp4":
+                return self.send_video(SIM_CLIP)
             for shared, ok in (("cards", (".jpg", ".png")), ("jobs", (".json",)), ("done", (".json",))):
                 if path == f"/{shared}/index.json" and shared != "cards":
                     return self.send(sorted(p.stem for p in store.folder(shared).glob("[0-9]*.json")))
@@ -389,6 +434,10 @@ def make_handler(app):
                 keep = {k: body[k] for k in ("corners", "card_mm", "line", "name", "tick", "number", "page",
                                              "mode", "camera", "house_line", "deadline_s", "tick_ink_min") if k in body}
                 lay.save({**lay.load(), **keep})
+            elif path == "/api/sim":
+                problem = app.set_sim(str(arg("on")) in ("1", "true", "True"))
+                if problem:
+                    return self.send({"ok": False, "error": problem}, code=409)
             elif path == "/api/record":
                 if app.recorder:
                     app.record_stop()
