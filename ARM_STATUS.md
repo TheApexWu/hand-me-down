@@ -1,6 +1,6 @@
 # Arm Status
 
-Updated Sun 22 Nov 2026, 13:07. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
+Updated Sun 22 Nov 2026, 13:27. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
 
 ## Working
 
@@ -22,10 +22,21 @@ For the arm-offline switch: `git show origin/alex/arm-pen:docs/hand-me-down-sim-
 
 ## Not ready
 
-- Writing is not stable yet. One 18 mm word at 24 mm/s was legible on the real arm, with a broken "m". Longer lines are untested at this size.
+- Writing is improving but not cleared. With joined strokes, one 18 mm word at 24 mm/s wrote cleanly on the real arm. Longer lines are untested at this size, and the arm is 0 of 3 on real pipeline runs.
 - `mode: "trace"` is not implemented on the arm. It falls back to font and writes `line`.
-- A job the arm refuses gets no `done` file, so the screen would keep waiting.
+- The arm worker does not send a `refused` reply yet. The card side already accepts one.
 - Pen height is one value for the whole card (first ink 49 mm, writing 46 mm). Moving the riser or pen means measuring it again.
+
+## Plan: Hermes drives the arm
+
+Status: planned, not built. Today Hermes picks the card and deterministic code drives the arm.
+
+- **Two Hermes roles.** The chooser stays on the card laptop, reads card text and has only `give`. A separate `arm` profile on Alex's laptop runs the arm. It sees job numbers and measurements, and never receives card text, so a hostile card cannot steer it.
+- **Arm tools:** `arm_status`, `write_job(job, press_mm, speed)`, `finish_job(job, note)`, `refuse_job(job, reason)`, `stop_arm`.
+- **Limits enforced in code:** queued jobs only, no free text, no raw joint commands, press 2-4 mm, speed 0.7-1.2x, blank-card check before writing, and a return to L after every run.
+- **Feedback loop:** after each write, the webcam scores ink along the planned path. Hermes sees recent runs and chooses the next press and speed inside those limits.
+- **Build order:** tools in dry mode, one real Hermes turn on a fake job, then one supervised run on the real arm.
+- **Card side:** no job contract change. The existing `refused` reply is what `refuse_job` will send. Keep `jobs/` empty until Alex says connect.
 
 ## Needed from the card side before production
 
