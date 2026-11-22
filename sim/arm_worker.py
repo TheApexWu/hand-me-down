@@ -79,7 +79,10 @@ def job_text(job):
     """What the pen writes: the chosen 2-3 word quote, or the whole line for a house or typed test job."""
     quote = job.get("quote")
     if quote and not job.get("house") and not job.get("test"):
-        text = clean(str(quote))
+        # Tiny lifted marks are the pen's hardest move, so a quote is inked as its words only.
+        text = " ".join(w for w in (w.rstrip("!?.,;:") for w in clean(str(quote)).split()) if w)
+        if not text:
+            raise Refused("quote has no words")
         if len(text.split()) > MAX_QUOTE_WORDS or len(text) > MAX_QUOTE_CHARS:
             raise Refused(f"quote must be at most {MAX_QUOTE_WORDS} words and {MAX_QUOTE_CHARS} characters")
         return text
