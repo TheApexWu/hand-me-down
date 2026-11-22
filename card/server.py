@@ -116,6 +116,7 @@ class App:
     token = None           # set by --lan: a request from another machine must carry it
     trust_loopback = True  # tests turn this off to play the part of another machine
     sim = False            # the operator's switch: the arm is offline, play the simulation clip
+    pose = {}              # the arm's last pose, as the arm laptop sent it (POST /pose), for the 3D panel
 
     def __init__(self, camera_spec=None, use_camera=True, image=None, reducto_call=None):
         self.camera, self.camera_spec, self.use_camera = None, camera_spec, use_camera
@@ -202,7 +203,7 @@ class App:
         self.choose(card)
 
     def choose(self, card):
-        store.set_state(stage="choosing", **self.screen_card(card, "visitor"))
+        store.set_state(stage="choosing", **self.screen_card(card, "visitor"), candidates=self.candidates(card))
         try:
             self.job = visit.give(card)
         except jobs.NoJob as none:   # nothing the arm could write: say so to the operator, show only their line
@@ -259,7 +260,23 @@ class App:
 
     def screen_card(self, card, who):
         url, size = self.ink(card)
-        return {who: url, f"{who}_size": size}
+        out = {who: url, f"{who}_size": size}
+        if url and card:   # the workings, for the screen: the read and where each word sits on the ink
+            rect = ink_rect(card)
+            out[f"{who}_line"] = card.get("line") or ""
+            out[f"{who}_no"] = card["card_no"]
+            out[f"{who}_words"] = [to_crop(w["box"], rect) for w in card.get("words") or [] if w.get("box")] if rect else []
+            out[f"{who}_read_secs"] = card.get("read_secs")
+        return out
+
+    def candidates(self, visitor, most=6):
+        """The cards the chooser is comparing this visitor's line with (all OK to show), for the screen."""
+        out = []
+        for c in store.waiting(exclude={visitor["card_no"]})[:most]:
+            url, size = self.ink(c)
+            if url and size:
+                out.append({"no": c["card_no"], "ink": url, "size": size})
+        return out
 
     def show_job(self, visitor):
         job = self.job
@@ -269,7 +286,8 @@ class App:
             theirs = {"stranger": "/house.png", "stranger_size": image_size(HANDWRITING["house"])}
         store.set_state(stage="writing", **self.screen_card(visitor, "visitor"), **theirs,
                         rows=rows_in(stranger) if stranger and stranger.get("ink") else None,
-                        by=job["picked_by"],
+                        by=job["picked_by"], quote=job.get("quote"), writes=job.get("line"), mode=job.get("mode"),
+                        misses=job.get("misses", 0), pick_secs=job.get("pick_secs"),
                         marks=quote_marks(job["quote"], stranger, visitor if visitor and visitor.get("may_show") else None),
                         job=job["card_no"], started=time.time(), est_s=jobs.expected_seconds())
         self.record_start(f"job{store.nnn(job['card_no'])}")
@@ -342,7 +360,8 @@ class App:
                 break
         made = {k: (f"/{k}.png" if p.exists() else None) for k, p in HANDWRITING.items()}
         sizes = {f"{k}_size": image_size(p) if p.exists() else None for k, p in HANDWRITING.items()}
-        return {"cards": out, **made, **sizes}
+        delivered = sum(1 for p in store.folder("done").glob("[0-9]*.json") if jobs.delivered(store.read_json(p)))
+        return {"cards": out, **made, **sizes, "waiting": len(store.waiting()), "delivered": delivered}
 
     def status(self):
         def brief(c):
@@ -469,6 +488,13 @@ def make_handler(app):
                 return self.send({**store.state(), "sim": app.sim, "now": time.time()})
             if path == "/stack.json":
                 return self.send(app.stack())
+            if path == "/pose.json":
+                return self.send(app.pose)
+            if path.startswith("/sim/so101/assets/") and name.lower().endswith(".stl"):
+                target = (store.ROOT / "sim" / "so101" / "assets" / name).resolve()
+                if target.parent == (store.ROOT / "sim" / "so101" / "assets").resolve() and target.is_file():
+                    return self.send_file(target, "model/stl")
+                return self.send({"error": "not found"}, code=404)
             if path in ("/invitation.png", "/house.png"):
                 return self.send_file(HANDWRITING[path[1:-4]])
             if path.startswith("/screen/") and name.endswith((".js", ".css", ".svg", ".png", ".json", ".stl", ".STL")):
@@ -524,6 +550,16 @@ def make_handler(app):
                 return self.send({"error": "not JSON"}, code=400)
             arg = lambda k: body.get(k) if k in body else (query.get(k) or [None])[0]
 
+            # the arm's pose for the 3D panel (ARM_STATUS.md): another machine may send it, with the token
+            if path == "/pose":
+                pos = body.get("pos") if isinstance(body, dict) else None
+                joints = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll")
+                if not isinstance(pos, dict) or not all(isinstance(pos.get(j), (int, float)) and abs(pos[j]) <= 360 for j in joints):
+                    return self.send({"error": f"pos must give degrees for {', '.join(joints)}"}, code=400)
+                t = body.get("t")
+                app.pose = {"pos": {j: float(pos[j]) for j in joints}, "phase": str(body.get("phase") or "")[:40],
+                            "t": float(t) if isinstance(t, (int, float)) else time.time()}
+                return self.send({"ok": True})
             # the arm laptop's reply: the one thing another machine may write
             if path.startswith("/done/") and path.endswith(".json"):
                 stem = Path(path).stem
