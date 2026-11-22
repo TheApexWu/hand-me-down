@@ -68,11 +68,11 @@ def test_the_chooser_is_shown_each_cards_phrases(card_photo, monkeypatch):
     for i, t in enumerate(["keeps the porch light on", "never learned to swim"]):
         visit.run(file=card_photo(f"s{i}", t), seed=True, call=reducto_says(t)); time.sleep(0.01)
     seen = {}
-    monkeypatch.setattr(pick, "ask", lambda line, lines, **kw: seen.update(lines) or {"card": "001", "quote": "porch light on", "misses": 0, "secs": .1, "why": None})
+    monkeypatch.setattr(pick, "ask", lambda line, lines, **kw: seen.update(lines) or {"card": "001", "quote": "the porch light", "misses": 0, "secs": .1, "why": None})
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("waits up at night"), is_online=True)
     assert seen["001"]["line"] == "keeps the porch light on" and "the porch light" in seen["001"]["phrases"]
     assert all(len(p) <= MAX_QUOTE_CHARS for v in seen.values() for p in v["phrases"])
-    assert job["quote"] == "porch light on"
+    assert job["quote"] == "the porch light"
 
 
 def test_house_and_typed_test_jobs_still_write_their_line(card_photo, site):
@@ -130,3 +130,14 @@ def test_hermes_still_chooses_when_only_one_card_is_waiting(card_photo, monkeypa
     monkeypatch.setattr(pick, "HERMES_CMD", FAKE + "'" + json.dumps([["001", "Keep Going!!"]]) + "'")
     _, job = visit.run(file=card_photo("v", "v"), call=reducto_says("I feel lost and left behind"), is_online=True)
     assert job["picked_by"] == "hermes" and job["card_no"] == 1 and job["quote"] == "Keep Going"
+
+
+def test_archive_lines_offer_only_phrases_that_stand_alone():
+    card = {"line": "I am so sorry! I hope you are okay!", "bank_id": "h08"}
+    assert [p["text"] for p in quotes.phrases(card)] == ["so sorry!", "you are okay!"]
+
+
+@pytest.mark.parametrize("line, cut", [("I hope you feel better", "I hope you"), ("I really hope you feel better", "really hope you"),
+                                       ("I am proud of you for it", "of you for")])
+def test_a_phrase_that_stops_mid_thought_is_not_offered(line, cut):
+    assert cut not in [p["text"] for p in quotes.phrases_from_text(line)]
