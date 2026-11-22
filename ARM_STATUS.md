@@ -1,6 +1,6 @@
 # Arm Status
 
-Updated Sun 22 Nov 2026, 13:39. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
+Updated Sun 22 Nov 2026, 13:43. Arm code is on `alex/arm-pen`. The arm stays on Alex's laptop.
 
 ## Working
 
@@ -26,6 +26,17 @@ For the arm-offline switch: `git show origin/alex/arm-pen:docs/hand-me-down-sim-
 - `mode: "trace"` is not implemented on the arm. It falls back to font and writes `line`.
 - The arm worker does not send a `refused` reply yet. The card side already accepts one.
 - Pen height is one value for the whole card (first ink 49 mm, writing 46 mm). Moving the riser or pen means measuring it again.
+
+## Quote mode: what the visitor receives
+
+The arm now writes only `quote`: an exact phrase from a real stranger's card, at most 3 words and 16 characters.
+
+- Build candidate phrases from Reducto's word boxes: 2-3 consecutive words in one written row, inside that limit after `clean()`.
+- Hermes must choose one candidate exactly. It may not rewrite, summarize or invent words.
+- Put that phrase in the job's `quote` and keep the full card text in `line`.
+- A card with no valid candidate cannot be picked.
+- Keep the visitor's own card off the public screen. Show only the words they receive.
+- House and typed test jobs still write `line`. The arm refuses any other quote over the limit.
 
 ## Hermes drives the arm
 

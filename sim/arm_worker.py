@@ -35,6 +35,7 @@ RED_LINE_V = 24.0                    # same header position as demo_twin
 TEXT_V = (-(CARD_V / 2 - FIT_MARGIN), RED_LINE_V - 2.0)
 CAP_MAX, CAP_MIN, CAP_STEP = 18.0, 6.0, 0.25
 MAX_LINES, PITCH = 3, 1.45
+MAX_QUOTE_WORDS, MAX_QUOTE_CHARS = 3, 16
 FONT_CAP = 21.0
 
 HOVER_Z, LIFT = 95.0, 8.0
@@ -72,6 +73,20 @@ def clean(text):
     if not text:
         raise Refused("empty line")
     return text
+
+
+def job_text(job):
+    """What the pen writes: the chosen 2-3 word quote, or the whole line for a house or typed test job."""
+    quote = job.get("quote")
+    if quote and not job.get("house") and not job.get("test"):
+        text = clean(str(quote))
+        if len(text.split()) > MAX_QUOTE_WORDS or len(text) > MAX_QUOTE_CHARS:
+            raise Refused(f"quote must be at most {MAX_QUOTE_WORDS} words and {MAX_QUOTE_CHARS} characters")
+        return text
+    line = job.get("line")
+    if not isinstance(line, str):
+        raise Refused("job has no text line")
+    return clean(line)
 
 
 def glyphs(text, cap):
@@ -445,7 +460,7 @@ def handle(path, root, a, planner, seen):
             raise Refused("house line is still the placeholder")
         if job.get("mode", "font") != "font":
             log(f"[{name}] mode {job['mode']} is not ready: FELL BACK to font using line")
-        plan = planner.plan(line, pen_height(a.press, a.run))
+        plan = planner.plan(job_text(job), pen_height(a.press, a.run))
     except Refused as e:
         log(f"[{name}] REFUSED: {e}")
         seen[path.name] = stamp

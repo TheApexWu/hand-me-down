@@ -117,7 +117,8 @@ def write_job(job: str, press_mm: float = 3.0, speed: float = 1.0) -> str:
     keep = aw.DRAW, aw.A_DRAW
     aw.DRAW, aw.A_DRAW = keep[0] * speed, keep[1] * speed ** 2
     try:
-        plan = aw.Planner().plan(line, first - press_mm)
+        text = aw.job_text(data)
+        plan = aw.Planner().plan(text, first - press_mm)
     except aw.Refused as e:
         return fail(f"cannot be written: {e}")
     finally:
@@ -148,7 +149,7 @@ def write_job(job: str, press_mm: float = 3.0, speed: float = 1.0) -> str:
     if halted or not home:
         return fail(f"arm stopped: {halted or 'did not confirm return to L'}")
     time.sleep(0.6)
-    score = ink_score(before, learn.fresh_frame(time.time()), line)
+    score = ink_score(before, learn.fresh_frame(time.time()), text)
     result = {**result, **score, "live": True, "seconds": round(time.monotonic() - started, 1)}
     written[stem] = result
     RUNS.parent.mkdir(parents=True, exist_ok=True)
