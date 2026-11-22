@@ -97,14 +97,14 @@
       const s = await (await fetch('/state.json', {cache: 'no-store'})).json();
       if (s.v !== seen) {
         seen = s.v; st = s;
-        const pair = (s.stage === 'writing' || s.stage === 'delivered') && s.stranger;
+        const pair = ['writing', 'held', 'delivered'].includes(s.stage) && s.stranger;
         document.body.className = s.stage + (s.sim ? ' sim-on' : '');
         const clip = $('sim-video');
         if (s.sim && clip.paused) { if (!clip.src) clip.src = '/sim.mp4'; clip.currentTime = 0; clip.play().catch(() => {}); }
         if (!s.sim && !clip.paused) clip.pause();
         m.className = (pair ? 'pair' : 'solo') + (s.by ? ' by-' + s.by : '');
         const marks = s.marks || {};
-        show($('yours'), ['confirm', 'choosing', 'writing', 'delivered'].includes(s.stage) ? s.visitor : null, pair ? marks.visitor : [], s.v);
+        show($('yours'), ['confirm', 'choosing', 'card', 'writing', 'held', 'delivered'].includes(s.stage) ? s.visitor : null, pair ? marks.visitor : [], s.v);
         show($('theirs'), pair ? s.stranger : null, marks.stranger, s.v);
         const p = s.postmark || {};
         $('pm-a').textContent = p.written_at || ''; $('pm-b').textContent = (String(p.delivered_at || '').match(/\d{1,2}:\d{2}/) || [''])[0];

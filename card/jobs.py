@@ -3,7 +3,8 @@
   jobs/031.json  {"card_no": 31, "line": "...", "crop": "cards/031_line.png", "bbox": [l, t, w, h],
                   "quote": "...", "picked_by": "hermes|rule|offline", "written_at": "10:42",
                   "mode": "font|trace"}
-  done/031.json  {"delivered_at": "...", "duration_s": 134}      written by the arm side
+  done/031.json  {"delivered_at": "...", "duration_s": 134}      written by the arm side, or, if it
+                 would not write the job: {"refused": "reason", "delivered_at": null, "duration_s": null}
 
 card_no is the card whose line the arm writes (the stranger's). bbox is the line's box
 as fractions of the squared-up card image (card_img); crop is that line already cut out.
@@ -128,7 +129,13 @@ def write_test(text):
 
 
 def done(n):
+    """The arm side's reply to job n, or None. A reply is not always a delivery: see delivered()."""
     return store.read_json(done_file(n))
+
+
+def delivered(reply):
+    """True only for a reply that says the arm wrote the job. A refusal is a reply too, and is never this."""
+    return bool(reply) and not reply.get("refused")
 
 
 def expected_seconds(default=90):

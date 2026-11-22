@@ -81,16 +81,14 @@ def test_the_progress_bar_expects_ninety_seconds_until_the_arm_has_replied():
     assert jobs.expected_seconds() == 88
 
 
-def test_a_job_with_no_reply_is_flagged_for_the_operator(site, monkeypatch):
+def test_a_job_with_no_reply_leaves_writing_and_can_still_be_delivered(site):
     site.call("/api/testjob", body={"text": "hand me down"})
     writing = wait_for("writing", site)
-    assert not writing.get("late")
     store.set_state(**{**writing, "started": time.time() - 600})    # ten minutes with no done file
-    for _ in range(40):
-        time.sleep(0.1)
-        if store.state().get("late"):
-            break
-    assert store.state()["late"] is True and store.state()["stage"] == "writing"
+    held = wait_for("held", site)
+    assert held["held"] == "late" and "postmark" not in held         # the visitor screen is out of "writing"
+    store.write_json(jobs.done_file(900), {"delivered_at": "13:20", "duration_s": 95})   # the arm was only slow
+    assert wait_for("delivered", site)["postmark"]["delivered_at"] == "13:20"
 
 
 def test_a_tick_area_counts_only_once_the_card_is_located(card_photo):

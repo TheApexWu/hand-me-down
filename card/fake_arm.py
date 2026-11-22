@@ -19,8 +19,11 @@ ROOT = Path(__file__).resolve().parent.parent
 print = functools.partial(print, flush=True)  # a person is watching this log, often through a pipe
 
 
-def run_once(root, seconds, log=print, sleep=time.sleep):
-    """Do every job that is waiting. Returns the job numbers delivered."""
+def run_once(root, seconds, log=print, sleep=time.sleep, refuse_if=None):
+    """Do every job that is waiting. Returns the job numbers delivered.
+
+    refuse_if: refuse any job whose line contains this text, the way the real arm side replies
+    when it will not write a job."""
     root, delivered = Path(root), []
     (root / "done").mkdir(parents=True, exist_ok=True)
     for job_file in sorted((root / "jobs").glob("[0-9]*.json")):
@@ -35,9 +38,15 @@ def run_once(root, seconds, log=print, sleep=time.sleep):
             log(f"job {job_file.stem}: withdrawn before the pen moved; skipped")
             continue
         started = time.time()
+        tmp = done_file.with_name(f".{done_file.name}.tmp")
+        if refuse_if and refuse_if.lower() in str(job.get("line", "")).lower():
+            tmp.write_text(json.dumps({"refused": f"fake arm refuses lines containing {refuse_if!r}",
+                                       "delivered_at": None, "duration_s": None}))
+            tmp.replace(done_file)
+            log(f"job {job_file.stem}: REFUSED")
+            continue
         log(f"job {job_file.stem}: pretending to write {job.get('line')!r} in {job.get('mode')} mode ({seconds:g} s)")
         sleep(seconds)
-        tmp = done_file.with_name(f".{done_file.name}.tmp")
         tmp.write_text(json.dumps({"delivered_at": time.strftime("%H:%M"), "duration_s": round(time.time() - started)}))
         tmp.replace(done_file)
         delivered.append(job_file.stem)
@@ -50,10 +59,11 @@ def main():
     ap.add_argument("--root", default=str(ROOT), help="where jobs/ and done/ live (default: this repo)")
     ap.add_argument("--seconds", type=float, default=8, help="how long a job pretends to take")
     ap.add_argument("--once", action="store_true", help="do what is waiting, then exit")
+    ap.add_argument("--refuse-if", metavar="TEXT", help="refuse any job whose line contains TEXT")
     args = ap.parse_args()
     print(f"FAKE ARM watching {args.root}/jobs (nothing moves, nothing is written on paper)")
     while True:
-        run_once(args.root, args.seconds)
+        run_once(args.root, args.seconds, refuse_if=args.refuse_if)
         if args.once:
             return
         time.sleep(0.5)

@@ -180,7 +180,7 @@ class App:
 
     def another(self):
         card = store.load_card(self.visitor) if self.visitor else None
-        if not card or not self.job or jobs.done(self.job["card_no"]):
+        if not card or not self.job or jobs.delivered(jobs.done(self.job["card_no"])):
             return
         tried = set(card.get("got", []))
         visit.ungive(self.job)
@@ -203,7 +203,7 @@ class App:
 
     def withdraw(self):
         """Take back the job in play before the arm has done it (the arm side deletes its copy)."""
-        if self.job and not jobs.done(self.job["card_no"]):
+        if self.job and not jobs.delivered(jobs.done(self.job["card_no"])):
             visit.ungive(self.job)
             self.job = None
             self.record_stop()
@@ -223,23 +223,36 @@ class App:
         self.record_start(f"job{store.nnn(job['card_no'])}")
 
     def watch_done(self):
-        """Fill the postmark when the arm's reply lands in done/."""
+        """Follow the job in play: delivered when the arm says so, held when it refuses or goes quiet."""
         while not self.stop.wait(0.5):
             st = store.state()
-            if st.get("stage") != "writing" or not self.job:
+            if st.get("stage") not in ("writing", "held") or not self.job:
                 if self.recorder and self.recorder.auto and time.time() > self.recorder.until:
                     self.record_stop()
                 continue
             reply = jobs.done(self.job["card_no"])
             waited = time.time() - st.get("started", time.time())
-            if not reply and not st.get("late") and waited > max(180, 2.5 * st.get("est_s", 90)):
-                # a job the arm refuses gets no reply: tell the operator instead of waiting for ever
-                store.set_state(**{**st, "late": True})
-            if reply:
-                store.set_state(**{**st, "stage": "delivered", "postmark": {
+            if reply and reply.get("refused"):
+                if st.get("held") != "refused":
+                    self.arm_refused(str(reply["refused"]), st)
+            elif reply:
+                store.set_state(**{**st, "stage": "delivered", "held": None, "postmark": {
                     "written_at": self.job["written_at"], "delivered_at": reply.get("delivered_at"),
                     "duration_s": reply.get("duration_s")}})
                 self.record_stop()
+            elif st["stage"] == "writing" and waited > max(180, 2.5 * st.get("est_s", 90)):
+                # no reply at all: the visitor screen must not sit on "writing" for ever
+                store.set_state(**{**st, "stage": "held", "held": "late"})
+
+    def arm_refused(self, reason, st):
+        """The arm would not write this job. Never shown as delivered; the card comes off the rail."""
+        card = None if self.job.get("house") else store.load_card(self.job["card_no"])
+        if card:
+            card.update(status="unwritable", cannot_write=f"the arm refused it: {reason}")
+            card.pop("given_to", None)
+            store.save_card(card)
+        store.set_state(**{**st, "stage": "held", "held": "refused", "reason": reason[:200]})
+        self.record_stop()
 
     # recordings of test runs, for checking the arm against the page ----------
 
@@ -438,9 +451,11 @@ def make_handler(app):
                 stem = Path(path).stem
                 if not (stem.isdigit() and jobs.job_file(stem).exists() and isinstance(body, dict)):
                     return self.send({"error": "no such job"}, code=404)
-                store.write_json(jobs.done_file(stem), {"delivered_at": str(body.get("delivered_at", ""))[:40],
-                                                         "duration_s": body.get("duration_s")
-                                                         if isinstance(body.get("duration_s"), (int, float)) else None})
+                reply = {"delivered_at": str(body["delivered_at"])[:40] if body.get("delivered_at") else None,
+                         "duration_s": body["duration_s"] if isinstance(body.get("duration_s"), (int, float)) else None}
+                if body.get("refused"):     # the arm would not write it: keep the reason, and never call it delivered
+                    reply = {"refused": str(body["refused"])[:200], "delivered_at": None, "duration_s": None}
+                store.write_json(jobs.done_file(stem), reply)
                 return self.send({"ok": True})
             if not self.local():
                 return self.send({"error": "local only"}, code=403)

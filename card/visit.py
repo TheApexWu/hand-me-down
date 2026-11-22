@@ -69,8 +69,9 @@ def ungive(job):
         card["status"] = "waiting"
         card.pop("given_to", None)
         store.save_card(card)
-    if not jobs.done(job["card_no"]):
+    if not jobs.delivered(jobs.done(job["card_no"])):   # not written by the arm: the job is over, refusal and all
         jobs.job_file(job["card_no"]).unlink(missing_ok=True)
+        jobs.done_file(job["card_no"]).unlink(missing_ok=True)
 
 
 def run(frame=None, file=None, seed=False, call=None, **kw):

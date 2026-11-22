@@ -86,14 +86,17 @@
     try { st = await (await fetch('/api/status', {cache: 'no-store'})).json(); } catch (e) { $('error').textContent = 'server not answering'; return; }
     const s = st.state, v = s.v, vis = st.visitor, j = st.job, L = st.layout;
     $('cam').textContent = st.camera ? '· ' + st.camera : '';
-    $('busy').textContent = (st.busy ? 'working… (' + s.stage + ')' : s.stage) + (s.late ? ' · NO REPLY FROM THE ARM: withdraw the job, or play the simulation' : '');
-    $('busy').className = s.late ? 'bad' : 'warn';
+    const delivered = st.done && !st.done.refused;
+    const held = s.stage !== 'held' ? '' : s.held === 'refused' ? ' · REFUSED BY THE ARM: ' + (s.reason || '') + ' · press Another one, or Withdraw'
+               : ' · NO REPLY FROM THE ARM: withdraw the job, press Another one, or play the simulation';
+    $('busy').textContent = (st.busy ? 'working… (' + s.stage + ')' : s.stage) + held;
+    $('busy').className = held ? 'bad' : 'warn';
     $('error').textContent = [st.error, st.camera_error].filter(Boolean).join(' · ');
     $('notes').textContent = [st.layout_measured ? '' : 'layout.json is not measured yet: the whole frame is treated as the card', L.house_line === 'PLACEHOLDER HOUSE LINE' ? 'house line is still the placeholder' : '', L.require_tick && !L.tick ? 'no tick box in the layout: every card is treated as not OK to show' : '', L.require_tick ? '' : 'require_tick is off: every card is shown without a tick', st.sim_clip ? '' : 'no simulation clip at ' + st.sim_clip_wanted].filter(Boolean).join(' · ');
     $('b-visit').disabled = $('b-seed').disabled = st.busy || s.stage === 'confirm';
     $('b-yes').disabled = $('b-no').disabled = st.busy || s.stage !== 'confirm';
-    $('b-another').disabled = st.busy || !j || !!st.done || !vis;
-    $('b-withdraw').disabled = st.busy || !j || !!st.done; $('b-test').disabled = st.busy || s.stage === 'confirm';
+    $('b-another').disabled = st.busy || !j || delivered || !vis;
+    $('b-withdraw').disabled = st.busy || !j || delivered; $('b-test').disabled = st.busy || s.stage === 'confirm';
     $('b-sim').className = st.sim ? 'on' : ''; $('b-sim').firstChild.textContent = st.sim ? 'Simulation is on the screen: stop' : 'Arm offline: play simulation';
     $('b-sim').disabled = !st.sim && !st.sim_clip; $('b-sim').title = st.sim_clip ? '' : 'put the clip at ' + st.sim_clip_wanted;
         $('b-rec').className = st.recording ? 'on' : ''; $('b-rec').firstChild.textContent = st.recording ? 'Stop recording' : 'Record run';
@@ -110,11 +113,11 @@
     $('vtext').className = 'big ' + (vis ? (vis.private ? 'warn' : vis.line ? '' : 'bad') : 'dim');
     setImg($('vcrop'), vis && vis.img, v);
     $('vmeta').textContent = vis ? [vis.source && 'read via ' + vis.source, vis.name && 'from ' + vis.name, vis.ok === true ? 'OK to show: ticked' : vis.ok === false ? 'OK to show: not ticked' : '', vis.error && vis.line ? vis.error : ''].filter(Boolean).join(' · ') : '';
-    $('pick').textContent = j ? `· jobs/${nnn(j.card_no)}.json · ${j.picked_by} · ${j.mode} · ${j.pick_secs}s` + (st.done ? ' · delivered' : ' · waiting for the arm') : '';
+    $('pick').textContent = j ? `· jobs/${nnn(j.card_no)}.json · ${j.picked_by} · ${j.mode} · ${j.pick_secs}s` + (delivered ? ' · delivered' : st.done ? ' · REFUSED' : s.stage === 'held' ? ' · no reply' : ' · waiting for the arm') : '';
     $('pick').className = j && j.picked_by !== 'hermes' ? 'warn' : 'go';
     $('gtext').textContent = j ? j.line : 'nothing chosen'; $('gtext').className = 'big ' + (j ? '' : 'dim');
     setImg($('gcrop'), j && j.crop && '/' + j.crop, v);
-    $('why').textContent = j ? [(j.quote ? `quoted: “${j.quote}”` : j.why || ''), j.misses ? `${j.misses} refused` : '', j.trace && !j.trace.ok ? `font instead of their handwriting: ${j.trace.why}` : '', st.done ? `arm: ${st.done.delivered_at} · ${st.done.duration_s}s` : ''].filter(Boolean).join(' · ') : '';
+    $('why').textContent = j ? [(j.quote ? `quoted: “${j.quote}”` : j.why || ''), j.misses ? `${j.misses} quote(s) turned down` : '', j.trace && !j.trace.ok ? `font instead of their handwriting: ${j.trace.why}` : '', delivered ? `arm: ${st.done.delivered_at} · ${st.done.duration_s}s` : st.done ? `arm refused: ${st.done.refused}` : ''].filter(Boolean).join(' · ') : '';
     $('job').hidden = !j; if (j) $('job').textContent = JSON.stringify(Object.fromEntries(['card_no', 'line', 'crop', 'bbox', 'quote', 'picked_by', 'written_at', 'mode'].map(k => [k, j[k]])));
   }
 
