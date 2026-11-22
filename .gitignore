@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+*.mp4
+.DS_Store
+hermes-install.sh
+sim/traj*.json
