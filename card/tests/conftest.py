@@ -12,8 +12,14 @@ from card import layout as lay
 from card import store
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "live: needs the real Hermes container and a model call (HMD_LIVE=1)")
+
+
 @pytest.fixture(autouse=True)
-def data(tmp_path, monkeypatch):
+def data(tmp_path, monkeypatch, request):
+    if request.node.get_closest_marker("live"):
+        return tmp_path   # live checks talk to the real container, which shares the repo's own cache/turn
     monkeypatch.setattr(store, "BASE", tmp_path / "data")
     monkeypatch.setenv("HMD_DATA", str(tmp_path / "data"))
     monkeypatch.setattr(lay, "FILE", tmp_path / "layout.json")   # tests never touch the real layout

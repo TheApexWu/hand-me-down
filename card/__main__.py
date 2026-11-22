@@ -7,6 +7,7 @@
   rail                      list the cards
   hermes up|check|down      the Hermes container that does the choosing (needs OPENROUTER_API_KEY)
   warm [N]                  run N throwaway Hermes turns on made-up cards and time them
+  live                      checks against the real Hermes container: hostile cards, the made-up quote
   doctor                    check the key, the camera, the layout, Hermes and the body server
 """
 import argparse
@@ -109,6 +110,7 @@ def main():
     sub.add_parser("rail").set_defaults(fn=cmd_rail)
     w = sub.add_parser("warm"); w.add_argument("n", type=int, nargs="?", default=1); w.set_defaults(fn=cmd_warm)
     h = sub.add_parser("hermes"); h.add_argument("action", choices=["up", "check", "down"]); h.add_argument("--purge", action="store_true"); h.set_defaults(fn=cmd_hermes)
+    sub.add_parser("live").set_defaults(fn=lambda _: sys.exit(0 if __import__("card.live_checks", fromlist=["x"]).run_all() else 1))
     sub.add_parser("doctor").set_defaults(fn=cmd_doctor)
     args = p.parse_args()
     if args.cmd in ("serve", "layout"):
