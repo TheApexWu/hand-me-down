@@ -29,10 +29,10 @@ def test_phrases_are_two_or_three_words_from_one_row_within_the_character_limit(
     texts = [p["text"] for p in quotes.phrases(card)]
     assert texts == ["Lorem Ipsum", "dolor sit", "sit amet", "dolor sit amet"]
     assert "Ipsum dolor" not in texts                               # never across a line break
-    for p in quotes.phrases(two_rows(["Pretiumpretium", "ex", "sapiensapien"], ["Vitaevitaevitae", "pellentesquepellentesque"])):
+    for p in quotes.phrases(two_rows(["Pretiumpretiumpretiu", "ex", "sapiensapiensapiensa"], ["Vitaevitaevitaevitae", "pellentesquepellentesque"])):
         text, missing = pen_text(p["text"])
         assert not missing and 2 <= len(text.split()) <= 3 and len(text) <= MAX_QUOTE_CHARS
-    assert [p["text"] for p in quotes.phrases(two_rows(["Pretiumpretium", "ex", "sapiensapien"], ["Vitaevitaevitae", "pellentesquepellentesque"]))] == ["Pretiumpretium ex", "ex sapiensapien"]
+    assert [p["text"] for p in quotes.phrases(two_rows(["Pretiumpretiumpretiu", "ex", "sapiensapiensapiensa"], ["Vitaevitaevitaevitae", "pellentesquepellentesque"]))] == ["Pretiumpretiumpretiu ex", "ex sapiensapiensapiensa"]
 
 
 def test_a_phrase_takes_the_corrected_words_but_keeps_reductos_places():

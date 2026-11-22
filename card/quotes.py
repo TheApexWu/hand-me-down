@@ -1,7 +1,7 @@
 """Quote mode: the visitor receives a short, exact phrase from a stranger's card, not the whole card.
 
 From ARM_STATUS.md (22 Nov, 13:43): candidates are 2 or 3 consecutive words in one written row,
-at most 24 characters once cleaned the way the arm cleans them. They are built from Reducto's word
+at most 40 characters once cleaned the way the arm cleans them. They are built from Reducto's word
 boxes, so a phrase never runs across a line break. The chooser must pick one of them exactly (plain
 code checks it, in the hook and in the tool), the job carries it as `quote`, and a card with no
 candidate can't be given.

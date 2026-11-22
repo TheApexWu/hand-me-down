@@ -3,7 +3,7 @@ import json
 import sys
 import time
 
-from card import fake_arm, pick, store
+from card import fake_arm, pick, server, store
 
 FAKE = f"{sys.executable} -c \"import sys,json; from card.body_server import give; [print(give(c,q)) for c,q in json.loads(sys.argv[1])]\" "
 
@@ -70,3 +70,13 @@ def test_a_job_can_be_withdrawn_before_the_arm_does_it(site):
     wait_for("idle", site)
     assert not (store.BASE / "jobs" / "900.json").exists()
     assert fake_arm.run_once(store.BASE, seconds=0, log=lambda *_: None) == []   # nothing for the arm to write
+
+
+def test_the_screen_shows_the_visitors_card_only_with_the_demo_switch(card_photo, site, monkeypatch):
+    site.capture(card_photo("a", "x"), "I feel lost")
+    assert not any(k.startswith("mine") for k in wait_for("confirm", site))
+    assert site.call("/api/confirm", body={"yes": False})[0] == 200
+    wait_for("idle", site)
+    monkeypatch.setattr(server, "SHOW_VISITOR", True)
+    site.capture(card_photo("b", "y"), "I feel lost")
+    assert wait_for("confirm", site)["mine_line"] == "I feel lost"

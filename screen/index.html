@@ -426,10 +426,11 @@
     // screen never shows it, only that it was read and how long that took.
     if (now === 'reading' || now === 'confirm') {
       place($('scan'), ...CENTER(), 0); $('scan').style.display = 'block';
-      if (now === 'reading') { clearNotes(); note('l1', LABELS.reading); }
+      if (now === 'reading') { clearNotes(); $('scan').innerHTML = ''; note('l1', LABELS.reading); }
       if (now === 'reading' && was !== 'reading' && !reduce) $('flash').animate([{opacity: 0}, {opacity: .7, offset: .15}, {opacity: 0}], {duration: 700});
-      if (now === 'confirm' && was !== 'confirm') { clearNotes(); note('l1', LABELS.read(s.words || 0, s.read_secs)); note('l2', LABELS.checking); }
-    } else $('scan').style.display = '';
+      if (now === 'confirm' && was !== 'confirm') { clearNotes(); note('l1', LABELS.read(s.words || 0, s.read_secs)); note('l2', LABELS.checking);
+        if (s.mine) { $('scan').innerHTML = '<div class="area"></div>'; fillCard($('scan'), s.mine, s.mine_size); note('l2', '').textContent = s.mine_line || ''; } }
+    } else { $('scan').style.display = ''; $('scan').innerHTML = ''; }
 
     // matching: the visitor's card, sealed, and the waiting cards it is compared with
     if (now === 'choosing' || now === 'card') {

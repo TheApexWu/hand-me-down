@@ -28,6 +28,9 @@ from . import bank, jobs, read_card, store, visit
 from . import layout as lay
 from .quote import words as norm_words
 
+# For a demo with the team's own card. Off by default: the public screen never shows a visitor's words.
+SHOW_VISITOR = os.environ.get("HMD_SHOW_VISITOR") == "1"
+
 WEB = Path(__file__).parent / "web"
 SCREEN = store.ROOT / "screen" / "index.html"
 # Shown, labeled SIMULATION, when the operator says the arm is offline. Not in the repo (*.mp4 is ignored).
@@ -212,7 +215,8 @@ class App:
         self.visitor, self.job = card["card_no"], None
         if card.get("may_show"):
             # the public screen never shows the visitor's own card: only that it was read, and how fast
-            store.set_state(stage="confirm", words=len(card.get("words") or []), read_secs=card.get("read_secs"))
+            mine = self.screen_card(card, "mine") if SHOW_VISITOR else {}
+            store.set_state(stage="confirm", words=len(card.get("words") or []), read_secs=card.get("read_secs"), **mine)
         else:  # not OK to show: nothing of this card goes on the screen, so there is nothing to confirm
             self.choose(card)
 

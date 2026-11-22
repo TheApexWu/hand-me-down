@@ -13,7 +13,7 @@ rules removed, because that is what the tracer needs. The screen shows the untou
 House-line jobs have no card: they are numbered from 900 and are always mode "font".
 
 Quote mode: for a stranger's card the arm writes only `quote`, an exact phrase of 2 or 3 words
-from one written row of that card, at most 24 characters (card/quotes.py); `line` keeps the whole
+from one written row of that card, at most 40 characters (card/quotes.py); `line` keeps the whole
 card. House-line and typed test jobs still have the arm write `line`.
 
 Every job says where its words came from: "provenance" is "visitor" (a stranger's handwritten
