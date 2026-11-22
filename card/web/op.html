@@ -109,7 +109,7 @@
     $('pick').className = j && j.picked_by !== 'hermes' ? 'warn' : 'go';
     $('gtext').textContent = j ? j.line : 'nothing chosen'; $('gtext').className = 'big ' + (j ? '' : 'dim');
     setImg($('gcrop'), j && j.crop && '/' + j.crop, v);
-    $('why').textContent = j ? [(j.quote ? `quoted: “${j.quote}”` : j.why || ''), j.misses ? `${j.misses} refused` : '', st.done ? `arm: ${st.done.delivered_at} · ${st.done.duration_s}s` : ''].filter(Boolean).join(' · ') : '';
+    $('why').textContent = j ? [(j.quote ? `quoted: “${j.quote}”` : j.why || ''), j.misses ? `${j.misses} refused` : '', j.trace && !j.trace.ok ? `font instead of their handwriting: ${j.trace.why}` : '', st.done ? `arm: ${st.done.delivered_at} · ${st.done.duration_s}s` : ''].filter(Boolean).join(' · ') : '';
     $('job').hidden = !j; if (j) $('job').textContent = JSON.stringify(Object.fromEntries(['card_no', 'line', 'crop', 'bbox', 'quote', 'picked_by', 'written_at', 'mode'].map(k => [k, j[k]])));
   }
 

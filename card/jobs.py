@@ -33,10 +33,18 @@ def write(pick, visitor, layout=None):
         raise PermissionError(f"card {store.nnn(stranger['card_no'])} is not OK to show; no job is written for it")
     if stranger:
         n = stranger["card_no"]
-        can_trace = bool(stranger.get("crop") and stranger.get("bbox"))
+        mode, trace = "font", None
+        if layout["mode"] == "trace" and stranger.get("crop"):
+            # Ask the arm's own tracer, the way the arm will call it, before promising a trace.
+            # A line it can't trace cleanly is written in the font instead.
+            from .trace_check import traces_cleanly
+            ok, info = traces_cleanly(store.BASE / stranger["crop"])
+            trace = {"ok": ok, "strokes": info.get("strokes"),
+                     "why": None if ok else (info.get("reason") or info.get("error") or "the tracer's gate said no")}
+            mode = "trace" if ok else "font"
         job = {"card_no": n, "line": stranger["line"], "crop": stranger.get("crop"), "bbox": stranger.get("bbox"),
                "quote": pick["quote"], "picked_by": pick["picked_by"], "written_at": stranger["written_at"],
-               "mode": layout["mode"] if can_trace else "font",
+               "mode": mode, "trace": trace,
                "card_img": stranger.get("card_img"), "name": stranger.get("name") or None,
                "ok_to_show": stranger.get("ok_to_show")}
     else:
