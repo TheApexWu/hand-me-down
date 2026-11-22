@@ -129,7 +129,7 @@ def ask(visitor_line, lines, deadline=None, cmd=None, visitor_no=None):
         if proc.poll() is None:
             try:
                 os.killpg(proc.pid, signal.SIGTERM)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):     # macOS reports EPERM for a group that just exited
                 pass
             if in_container:
                 hermes.stop_turns()
