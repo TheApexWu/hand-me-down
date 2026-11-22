@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 hermes-install.sh
 sim/traj*.json
+runs/
+state/

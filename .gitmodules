@@ -1,0 +1,3 @@
+[submodule "vendor/so101-sketch"]
+	path = vendor/so101-sketch
+	url = https://github.com/dylanler/so101-robot-harness-for-drawing.git

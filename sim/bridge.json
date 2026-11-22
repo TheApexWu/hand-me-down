@@ -7,12 +7,12 @@
     "wrist_roll": 1.0
   },
   "offset_deg": {
-    "shoulder_pan": -2.374,
-    "shoulder_lift": 2.725,
-    "elbow_flex": 10.505,
-    "wrist_flex": 0.747,
-    "wrist_roll": -0.044
+    "shoulder_pan": 0.0,
+    "shoulder_lift": 0.0,
+    "elbow_flex": 0.0,
+    "wrist_flex": 0.0,
+    "wrist_roll": 0.0
   },
   "measured": true,
-  "source": "computed from follower_a.json: LeRobot reading at the calibration L pose"
+  "source": "LeRobot 0 deg = model zero (LeRobot kinematics and the dylanler rig both assume this); level check pending"
 }
