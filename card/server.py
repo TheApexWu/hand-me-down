@@ -32,6 +32,37 @@ WEB = Path(__file__).parent / "web"
 SCREEN = store.ROOT / "screen" / "index.html"
 # Shown, labeled SIMULATION, when the operator says the arm is offline. Not in the repo (*.mp4 is ignored).
 SIM_CLIP = Path(os.environ.get("HMD_SIM_CLIP") or store.ROOT / "screen" / "sim-demo.mp4")
+# Handwriting by the team, cut out as ink (python -m card handwriting ...). Not in the repo.
+HANDWRITING = {"invitation": store.ROOT / "screen" / "invitation.png", "house": store.ROOT / "screen" / "house.png"}
+
+
+def ink_rect(card):
+    """Where the screen's picture of this card's line sits on the card: the ink cut-out if there is one."""
+    return card.get("ink_rect") or card.get("crop_rect")
+
+
+def rows_in(card):
+    """The written rows of a card's line, as [left, top, right, bottom] fractions of its ink picture,
+    top to bottom: the screen reveals one row after another while the arm writes."""
+    rect, words = ink_rect(card), [w["box"] for w in card.get("words") or [] if w.get("box")]
+    if not rect or not words:
+        return None
+    boxes = sorted((to_crop(b, rect) for b in words), key=lambda b: b[1] + b[3] / 2)
+    rows = []
+    for b in boxes:
+        mid = b[1] + b[3] / 2
+        if rows and abs(mid - rows[-1]["mid"]) < 0.5 * b[3]:
+            r = rows[-1]
+            r["box"] = [min(r["box"][0], b[0]), min(r["box"][1], b[1]), max(r["box"][2], b[0] + b[2]), max(r["box"][3], b[1] + b[3])]
+        else:
+            rows.append({"mid": mid, "box": [b[0], b[1], b[0] + b[2], b[1] + b[3]]})
+    return [[round(max(0.0, v), 4) for v in r["box"]] for r in rows]
+
+
+def image_size(path):
+    import cv2
+    img = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    return [int(img.shape[1]), int(img.shape[0])] if img is not None else None
 
 
 def to_crop(box, rect):
@@ -47,7 +78,7 @@ def quote_marks(quote, stranger, visitor):
     q = norm_words(quote or "")
     if not q:
         return marks
-    if stranger and stranger.get("words") and stranger.get("crop_rect"):
+    if stranger and stranger.get("words") and ink_rect(stranger):
         flat = [(tok, i) for i, w in enumerate(stranger["words"]) for tok in norm_words(w["text"])]
         toks = [t for t, _ in flat]
         for s in range(len(toks) - len(q) + 1):
@@ -59,13 +90,13 @@ def quote_marks(quote, stranger, visitor):
                         rows[-1].append(box)
                     else:
                         rows.append([box])
-                marks["stranger"] += [to_crop(read_card.union(row), stranger["crop_rect"]) for row in rows]
+                marks["stranger"] += [to_crop(read_card.union(row), ink_rect(stranger)) for row in rows]
                 break
-    if visitor and visitor.get("words") and visitor.get("crop_rect"):
+    if visitor and visitor.get("words") and ink_rect(visitor):
         shared = {t for t in q if len(t) >= 4}  # skip "and", "the"
         for w in visitor["words"]:
             if shared & set(norm_words(w["text"])):
-                marks["visitor"].append(to_crop(w["box"], visitor["crop_rect"]))
+                marks["visitor"].append(to_crop(w["box"], ink_rect(visitor)))
     return marks
 
 
@@ -151,7 +182,7 @@ class App:
             return
         self.visitor, self.job = card["card_no"], None
         if card.get("may_show"):
-            store.set_state(stage="confirm", visitor=self.img(card))
+            store.set_state(stage="confirm", **self.screen_card(card, "visitor"))
         else:  # not OK to show: nothing of this card goes on the screen, so there is nothing to confirm
             self.choose(card)
 
@@ -171,13 +202,13 @@ class App:
         self.choose(card)
 
     def choose(self, card):
-        store.set_state(stage="choosing", visitor=self.img(card))
+        store.set_state(stage="choosing", **self.screen_card(card, "visitor"))
         try:
             self.job = visit.give(card)
         except jobs.NoJob as none:   # nothing the arm could write: say so to the operator, show only their line
             self.job, self.error = None, str(none)
             visit.shelve(card)
-            store.set_state(stage="card", visitor=self.img(card))
+            store.set_state(stage="card", **self.screen_card(card, "visitor"))
             return
         visit.shelve(card)
         self.show_job(card)
@@ -188,7 +219,7 @@ class App:
             return
         tried = set(card.get("got", []))
         visit.ungive(self.job)
-        store.set_state(stage="choosing", visitor=self.img(card))
+        store.set_state(stage="choosing", **self.screen_card(card, "visitor"))
         card["status"] = "new"  # keep the visitor's own card off the rail while choosing
         try:
             self.job = visit.give(card, exclude=tried)
@@ -214,13 +245,30 @@ class App:
             store.set_state(stage="idle")
 
     def img(self, card):
-        """The crop's URL for the screen, or None: a card that isn't OK to show never gets one."""
+        """The photo cut's URL (for the operator page), or None: a card that isn't OK to show never gets one."""
         return (card and card.get("may_show") and card.get("crop") and "/" + card["crop"]) or None
+
+    def ink(self, card):
+        """What the visitor screen shows of a card: its handwriting as ink, and the picture's size.
+        Falls back to the photo cut if there is no ink cut-out. Nothing for a card not OK to show."""
+        if not (card and card.get("may_show")):
+            return None, None
+        if card.get("ink") and (store.BASE / card["ink"]).exists():
+            return "/" + card["ink"], card.get("ink_size")
+        return self.img(card), None
+
+    def screen_card(self, card, who):
+        url, size = self.ink(card)
+        return {who: url, f"{who}_size": size}
 
     def show_job(self, visitor):
         job = self.job
         stranger = None if job.get("house") else store.load_card(job["card_no"])
-        store.set_state(stage="writing", visitor=self.img(visitor), stranger=self.img(stranger),
+        theirs = self.screen_card(stranger, "stranger")
+        if not stranger and HANDWRITING["house"].exists():   # the house line, in the team's own hand
+            theirs = {"stranger": "/house.png", "stranger_size": image_size(HANDWRITING["house"])}
+        store.set_state(stage="writing", **self.screen_card(visitor, "visitor"), **theirs,
+                        rows=rows_in(stranger) if stranger and stranger.get("ink") else None,
                         by=job["picked_by"],
                         marks=quote_marks(job["quote"], stranger, visitor if visitor and visitor.get("may_show") else None),
                         job=job["card_no"], started=time.time(), est_s=jobs.expected_seconds())
@@ -281,6 +329,20 @@ class App:
         self.sim = bool(on)
         store.set_state(**store.state())  # same state, new version: the screen redraws
         return None
+
+    def stack(self, most=6):
+        """The idle screen's loose stack: recent cards that are OK to show, newest first, as ink."""
+        cards = [c for c in store.all_cards() if c.get("may_show") and c.get("status") in ("waiting", "given")]
+        out = []
+        for c in reversed(cards):
+            url, size = self.ink(c)
+            if url and size:
+                out.append({"no": c["card_no"], "ink": url, "size": size})
+            if len(out) == most:
+                break
+        made = {k: (f"/{k}.png" if p.exists() else None) for k, p in HANDWRITING.items()}
+        sizes = {f"{k}_size": image_size(p) if p.exists() else None for k, p in HANDWRITING.items()}
+        return {"cards": out, **made, **sizes}
 
     def status(self):
         def brief(c):
@@ -404,7 +466,17 @@ def make_handler(app):
             if path == "/":
                 return self.send_file(SCREEN)
             if path == "/state.json":
-                return self.send({**store.state(), "sim": app.sim})
+                return self.send({**store.state(), "sim": app.sim, "now": time.time()})
+            if path == "/stack.json":
+                return self.send(app.stack())
+            if path in ("/invitation.png", "/house.png"):
+                return self.send_file(HANDWRITING[path[1:-4]])
+            if path.startswith("/screen/") and name.endswith((".js", ".css", ".svg", ".png", ".json", ".stl", ".STL")):
+                target = (store.ROOT / "screen" / path[len("/screen/"):]).resolve()
+                if store.ROOT / "screen" in target.parents and target.is_file():
+                    return self.send_file(target, {".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml",
+                                                   ".json": "application/json"}.get(target.suffix, "application/octet-stream"))
+                return self.send({"error": "not found"}, code=404)
             if path == "/sim.mp4":
                 return self.send_video(SIM_CLIP)
             for shared, ok in (("cards", (".jpg", ".png")), ("jobs", (".json",)), ("done", (".json",))):

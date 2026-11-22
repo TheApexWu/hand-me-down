@@ -7,6 +7,7 @@
   rail                      list the cards
   hermes up|check|down      the Hermes container that does the choosing (needs OPENROUTER_API_KEY)
   warm [N]                  run N throwaway Hermes turns on made-up cards and time them
+  handwriting invitation|house PHOTO   your own handwriting, cut out as ink, for the visitor screen
   live                      checks against the real Hermes container: hostile cards, the made-up quote
   doctor                    check the key, the camera, the layout, Hermes and the body server
 """
@@ -99,6 +100,13 @@ def cmd_rail(_):
               c.get("read_error") or "")
 
 
+def cmd_handwriting(args):
+    """Cut the team's own handwriting out of a photo, for the visitor screen."""
+    from .server import HANDWRITING
+    dest = read_card.ink_from_photo(args.photo, HANDWRITING[args.which])
+    print(f"wrote {store.rel(dest)}: the screen shows it {'on the idle page' if args.which == 'invitation' else 'for house-line jobs'}")
+
+
 def cmd_warm(args):
     for i in range(args.n):
         got = pick.warm()
@@ -167,6 +175,8 @@ def main():
     w = sub.add_parser("warm"); w.add_argument("n", type=int, nargs="?", default=1); w.set_defaults(fn=cmd_warm)
     h = sub.add_parser("hermes"); h.add_argument("action", choices=["up", "check", "down"]); h.add_argument("--purge", action="store_true"); h.set_defaults(fn=cmd_hermes)
     sub.add_parser("live").set_defaults(fn=lambda _: sys.exit(0 if __import__("card.live_checks", fromlist=["x"]).run_all() else 1))
+    hw = sub.add_parser("handwriting"); hw.add_argument("which", choices=["invitation", "house"]); hw.add_argument("photo")
+    hw.set_defaults(fn=cmd_handwriting)
     sub.add_parser("doctor").set_defaults(fn=cmd_doctor)
     args = p.parse_args()
     if args.cmd in ("serve", "layout"):

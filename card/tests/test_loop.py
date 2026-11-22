@@ -25,11 +25,12 @@ def test_card_to_delivered_with_the_fake_arm(card_photo, site, monkeypatch):
 
     site.capture(card_photo("v", "v"), "waits up at night for the porch light")
     confirm = wait_for("confirm", site)
-    assert confirm["visitor"].endswith("_line.png")
+    assert confirm["visitor"].endswith("_ink.png") and len(confirm["visitor_size"]) == 2
 
     assert site.call("/api/confirm", body={"yes": True})[0] == 200
     writing = wait_for("writing", site)
-    assert writing["stranger"] == "/cards/001_line.png" and writing["by"] == "hermes" and writing["job"] == 1
+    assert writing["stranger"] == "/cards/001_ink.png" and writing["by"] == "hermes" and writing["job"] == 1
+    assert writing["rows"] and all(len(r) == 4 for r in writing["rows"])
     assert len(writing["marks"]["stranger"]) == 1                    # the quoted words are boxed on their line
     assert writing["v"] > confirm["v"]
 
