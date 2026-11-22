@@ -70,6 +70,10 @@ def load_tracer(sim_dir=None):
     except OSError:
         named = None
     name = named.group(1) if named else "tracer"
+    # The arm side's decision (22 Nov): when trace mode is turned on it will use tracer_fix.py, which
+    # keeps the short strokes and dots that tracer.py drops. Check with that one if it is there.
+    if (sim_dir / "tracer_fix.py").exists():
+        name = "tracer_fix"
     for old in _ADDED + [str(sim_dir)]:                  # only one sim folder on the path at a time
         while old in sys.path:
             sys.path.remove(old)

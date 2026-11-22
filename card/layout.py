@@ -19,7 +19,7 @@ FILE = Path(os.environ.get("HMD_LAYOUT") or Path(__file__).parent / "layout.json
 CARD_PX = 1600  # width of the squared-up card image
 
 DEFAULT = {
-    "camera": "logitech",
+    "camera": "iphone",    # an iPhone on a fixed stand over the card (the Brio stays on the arm)
     "card_mm": [127, 76],
     "corners": [[0, 0], [1, 0], [1, 1], [0, 1]],
     "line": [0, 0, 1, 1],
