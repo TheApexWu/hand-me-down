@@ -65,3 +65,13 @@ def test_when_pangram_is_live_it_can_only_hold_a_card_for_a_person(monkeypatch):
     held = visit.shelve(card(5))
     assert held["status"] == "held" and held["gate"]["reasons"] == ["may be AI-written"]
     assert visit.release(held)["status"] == "waiting"
+
+
+def test_ending_an_overdue_chooser_turn_leaves_gate_checks_alone(monkeypatch):
+    from card import hermes
+    sent = []
+    monkeypatch.setattr(hermes, "docker", lambda *a, **k: sent.append(a))
+    hermes.stop_turns()
+    pattern = sent[0][-1]
+    assert "chooser chat --query-file" == pattern
+    assert pattern in "hermes -p chooser chat --query-file - -Q" and pattern not in "hermes -p gate chat --query-file - -Q"

@@ -141,8 +141,9 @@ def turn_argv():
 
 
 def stop_turns():
-    """A turn that ran past its deadline keeps running inside the container: end its client."""
-    docker("exec", NAME, "pkill", "-f", "chat --query-file", timeout=10)
+    """A turn that ran past its deadline keeps running inside the container: end its client.
+    Only chooser turns: a gate check in flight (hermes -p gate chat ...) is left alone."""
+    docker("exec", NAME, "pkill", "-f", f"{PROFILE} chat --query-file", timeout=10)
 
 
 def down(purge=False):
