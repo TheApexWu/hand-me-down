@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HMD operator</title>
+<style>
+  :root { color-scheme: dark; --bg: #15161a; --panel: #1f2127; --line: #34373f; --fg: #e9e7e2; --dim: #9a9ca3; --go: #7fd1a0; --warn: #f0b35c; --bad: #ef7d7d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; }
+  main { display: grid; grid-template-columns: minmax(320px, 46%) 1fr; gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+  h2 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 0 0 8px; }
+  h2 a { color: var(--go); text-transform: none; letter-spacing: 0; margin-left: 8px; }
+  .view { position: relative; line-height: 0; background: #000; border-radius: 6px; min-height: 120px; overflow: hidden; }
+  .view img { width: 100%; display: block; } .view svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  button { font: inherit; color: var(--fg); background: #2b2e36; border: 1px solid var(--line); border-radius: 6px; padding: 7px 11px; cursor: pointer; }
+  button:hover { background: #353944; } button:disabled { opacity: .4; cursor: default; }
+  button.main { background: #2f5c44; border-color: #3d7a5a; } button.on { background: #6b2f2f; border-color: #8a3d3d; }
+  kbd { font: 11px ui-monospace, monospace; background: #0006; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  code, .mono { font: 12px/1.5 ui-monospace, Menlo, monospace; }
+  pre { margin: 6px 0 0; background: #0005; border-radius: 6px; padding: 8px; overflow-x: auto; font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+  input[type=text] { flex: 1; min-width: 0; font: inherit; color: var(--fg); background: #0004; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  .dim { color: var(--dim); } .go { color: var(--go); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .big { font-size: 20px; overflow-wrap: anywhere; }
+  ul { list-style: none; margin: 0; padding: 0; } li { padding: 4px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; } li:first-child { border-top: 0; }
+  .crop { max-width: 100%; max-height: 90px; border-radius: 4px; background: #fff; margin-top: 6px; display: block; }
+</style>
+<main>
+  <div>
+    <section>
+      <h2>Card eye <span id="cam" class="dim"></span><a href="/layout">layout tool</a><a href="/" target="_blank">visitor screen</a></h2>
+      <div class="view"><img id="preview" alt=""><svg id="overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg></div>
+      <div class="row" style="margin-top:10px">
+        <button class="main" id="b-visit">Visit<kbd>space</kbd></button>
+        <button id="b-yes">Right<kbd>y</kbd></button>
+        <button id="b-no">Retake<kbd>n</kbd></button>
+        <button id="b-another">Another one<kbd>a</kbd></button>
+        <button id="b-seed">Seed the rail<kbd>s</kbd></button>
+        <button id="b-clear">Clear screen<kbd>c</kbd></button>
+        <button id="b-rec">Record run<kbd>r</kbd></button>
+      </div>
+      <div class="row" style="margin-top:8px"><span class="dim">Arm writes in</span>
+        <button id="b-font">plotter font</button><button id="b-trace">their handwriting</button>
+        <span id="busy" class="warn"></span></div>
+      <div id="error" class="bad" style="margin-top:8px"></div>
+      <div id="notes" class="warn" style="margin-top:4px"></div>
+    </section>
+    <section>
+      <h2>Rail <span id="counts" class="dim"></span></h2>
+      <ul id="rail"></ul>
+      <div id="unread-wrap" hidden><h2 style="margin-top:12px" class="warn">Unread: type what the card says</h2><ul id="unread"></ul></div>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>Visitor <span id="vid" class="dim"></span></h2>
+      <div id="vtext" class="big dim">no card yet</div>
+      <img id="vcrop" class="crop" hidden alt="">
+      <div id="vmeta" class="dim" style="margin-top:6px"></div>
+      <div class="row" style="margin-top:8px"><input type="text" id="fix" placeholder="correct the words (the arm writes the stranger's line from this later)"><button id="b-fix">Save</button><button id="b-reread">Re-read</button></div>
+    </section>
+    <section>
+      <h2>Job for the arm <span id="pick" class="dim"></span></h2>
+      <div id="gtext" class="big dim">nothing chosen</div>
+      <img id="gcrop" class="crop" hidden alt="">
+      <div id="why" class="dim" style="margin-top:6px"></div>
+      <pre id="job" hidden></pre>
+    </section>
+  </div>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const nnn = n => String(n).padStart(3, '0');
+  const post = (path, body) => fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})}).then(refresh);
+  let st = null;
+  function setImg(img, src, v) { if (!src) { img.hidden = true; return; } const u = src + '?v=' + v; if (img.dataset.src !== u) { img.dataset.src = u; img.src = u; } img.hidden = false; }
+  const poly = (pts, colour) => pts ? `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="${colour}" stroke-width="2" vector-effect="non-scaling-stroke"/>` : '';
+
+  async function refresh() {
+    try { st = await (await fetch('/api/status', {cache: 'no-store'})).json(); } catch (e) { $('error').textContent = 'server not answering'; return; }
+    const s = st.state, v = s.v, vis = st.visitor, j = st.job, L = st.layout;
+    $('cam').textContent = st.camera ? '· ' + st.camera : '';
+    $('busy').textContent = st.busy ? 'working… (' + s.stage + ')' : s.stage;
+    $('error').textContent = [st.error, st.camera_error].filter(Boolean).join(' · ');
+    $('notes').textContent = [st.layout_measured ? '' : 'layout.json is not measured yet: the whole frame is treated as the card', L.house_line === 'PLACEHOLDER HOUSE LINE' ? 'house line is still the placeholder' : ''].filter(Boolean).join(' · ');
+    $('b-visit').disabled = $('b-seed').disabled = st.busy || s.stage === 'confirm';
+    $('b-yes').disabled = $('b-no').disabled = st.busy || s.stage !== 'confirm';
+    $('b-another').disabled = st.busy || !j || !!st.done;
+    $('b-rec').className = st.recording ? 'on' : ''; $('b-rec').firstChild.textContent = st.recording ? 'Stop recording' : 'Record run';
+    $('b-font').className = L.mode === 'font' ? 'main' : ''; $('b-trace').className = L.mode === 'trace' ? 'main' : '';
+    $('overlay').innerHTML = (st.layout_measured ? poly(L.corners, '#7fd1a0') : '') + poly(L.page, '#6aa9ff');
+    $('counts').textContent = `· ${st.rail.length} waiting · ${st.given} given`;
+    $('rail').innerHTML = st.rail.map(c => `<li><span class="dim mono">${nnn(c.no)} ${c.at || ''}</span> ${esc(c.line)}${c.name ? ` <span class="dim">· ${esc(c.name)}</span>` : ''}${c.ok === true ? ' <span class="go">☑</span>' : ''}${c.corrected ? ' <span class="warn">(corrected)</span>' : ''}</li>`).join('') || '<li class="dim">empty: seed it before the first visitor, or they get the house line</li>';
+    $('unread-wrap').hidden = !st.unread.length;
+    if (document.activeElement?.dataset.card === undefined)
+      $('unread').innerHTML = st.unread.map(c => `<li><span class="mono">${nnn(c.no)}</span> <span class="dim">${esc(c.error)}</span><div class="row"><input type="text" data-card="${c.no}" placeholder="what it says"><button data-save="${c.no}">Save</button></div></li>`).join('');
+    $('vid').textContent = vis ? '· card ' + nnn(vis.no) : '';
+    $('vtext').textContent = vis ? (vis.line || vis.error || 'reading…') : 'no card yet';
+    $('vtext').className = 'big ' + (vis ? (vis.line ? '' : 'bad') : 'dim');
+    setImg($('vcrop'), vis && vis.img, v);
+    $('vmeta').textContent = vis ? [vis.source && 'read via ' + vis.source, vis.name && 'from ' + vis.name, vis.ok === true ? 'OK to show: ticked' : vis.ok === false ? 'OK to show: not ticked' : '', vis.error && vis.line ? vis.error : ''].filter(Boolean).join(' · ') : '';
+    $('pick').textContent = j ? `· jobs/${nnn(j.card_no)}.json · ${j.picked_by} · ${j.mode} · ${j.pick_secs}s` + (st.done ? ' · delivered' : ' · waiting for the arm') : '';
+    $('pick').className = j && j.picked_by !== 'hermes' ? 'warn' : 'go';
+    $('gtext').textContent = j ? j.line : 'nothing chosen'; $('gtext').className = 'big ' + (j ? '' : 'dim');
+    setImg($('gcrop'), j && j.crop && '/' + j.crop, v);
+    $('why').textContent = j ? [(j.quote ? `quoted: “${j.quote}”` : j.why || ''), j.misses ? `${j.misses} refused` : '', st.done ? `arm: ${st.done.delivered_at} · ${st.done.duration_s}s` : ''].filter(Boolean).join(' · ') : '';
+    $('job').hidden = !j; if (j) $('job').textContent = JSON.stringify(Object.fromEntries(['card_no', 'line', 'crop', 'bbox', 'quote', 'picked_by', 'written_at', 'mode'].map(k => [k, j[k]])));
+  }
+
+  $('b-visit').onclick = () => post('/api/capture');
+  $('b-seed').onclick = () => post('/api/capture', {seed: true});
+  $('b-yes').onclick = () => post('/api/confirm', {yes: true});
+  $('b-no').onclick = () => post('/api/confirm', {yes: false});
+  $('b-another').onclick = () => post('/api/another');
+  $('b-clear').onclick = () => post('/api/clear');
+  $('b-rec').onclick = () => post('/api/record');
+  $('b-font').onclick = () => post('/api/layout', {mode: 'font'});
+  $('b-trace').onclick = () => post('/api/layout', {mode: 'trace'});
+  $('b-fix').onclick = () => st?.visitor && $('fix').value.trim() && post('/api/fix', {card: st.visitor.no, text: $('fix').value}).then(() => $('fix').value = '');
+  $('b-reread').onclick = () => st?.visitor && post('/api/reread', {card: st.visitor.no});
+  document.addEventListener('click', e => {
+    const t = e.target;
+    if (t.dataset.save) { const i = document.querySelector(`input[data-card="${t.dataset.save}"]`); if (i.value.trim()) { i.blur(); post('/api/fix', {card: t.dataset.save, text: i.value}); } }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.metaKey || e.ctrlKey) return;
+    const b = {' ': 'b-visit', s: 'b-seed', y: 'b-yes', n: 'b-no', a: 'b-another', c: 'b-clear', r: 'b-rec'}[e.key];
+    if (b) { e.preventDefault(); if (!$(b).disabled) $(b).click(); }
+  });
+  setInterval(refresh, 700); refresh();
+  setInterval(() => { const p = $('preview'), n = new Image(); n.onload = () => p.src = n.src; n.src = '/preview.jpg?t=' + Date.now(); }, 400);
+</script>
+</html>

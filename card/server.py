@@ -1,0 +1,367 @@
+"""The visitor screen, the operator page and the layout tool, on one small HTTP server.
+
+  /         visitor screen (screen/index.html): handwriting crops only, nothing typed
+  /op       operator page: live camera, capture, confirm, fixes, the job in play
+  /layout   click the card's corners and the line box, save card/layout.json
+
+With --lan, other machines can read the screen, cards/, jobs/ and done/, and the arm
+laptop can POST its reply to /done/NNN.json. Everything else answers this machine only.
+"""
+import json
+import threading
+import time
+import traceback
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+import cv2
+
+from . import jobs, read_card, store, visit
+from . import layout as lay
+from .quote import words as norm_words
+
+WEB = Path(__file__).parent / "web"
+SCREEN = store.ROOT / "screen" / "index.html"
+
+
+def to_crop(box, rect):
+    """A box in card fractions -> fractions of the line crop."""
+    return [round((box[0] - rect[0]) / rect[2], 4), round((box[1] - rect[1]) / rect[3], 4),
+            round(box[2] / rect[2], 4), round(box[3] / rect[3], 4)]
+
+
+def quote_marks(quote, stranger, visitor):
+    """Where the quoted words sit in each crop: one box on the stranger's line, and a box on
+    each word of the visitor's line that the quote shares."""
+    marks = {"stranger": [], "visitor": []}
+    q = norm_words(quote or "")
+    if not q:
+        return marks
+    if stranger and stranger.get("words") and stranger.get("crop_rect"):
+        flat = [(tok, i) for i, w in enumerate(stranger["words"]) for tok in norm_words(w["text"])]
+        toks = [t for t, _ in flat]
+        for s in range(len(toks) - len(q) + 1):
+            if toks[s:s + len(q)] == q:
+                idx = sorted({i for _, i in flat[s:s + len(q)]})
+                box = read_card.union([stranger["words"][i]["box"] for i in idx])
+                marks["stranger"].append(to_crop(box, stranger["crop_rect"]))
+                break
+    if visitor and visitor.get("words") and visitor.get("crop_rect"):
+        shared = {t for t in q if len(t) >= 4}  # skip "and", "the"
+        for w in visitor["words"]:
+            if shared & set(norm_words(w["text"])):
+                marks["visitor"].append(to_crop(w["box"], visitor["crop_rect"]))
+    return marks
+
+
+class App:
+    def __init__(self, camera_spec=None, use_camera=True, image=None):
+        self.camera, self.camera_spec, self.use_camera = None, camera_spec, use_camera
+        self.camera_error = None
+        self.image = image  # a still to stand in for the camera (layout tool, testing)
+        self.busy = threading.Lock()
+        self.error = None
+        self.visitor, self.job = None, None
+        self.recorder = None
+
+    def cam(self):
+        if self.camera is None and self.use_camera and not self.image:
+            from .capture import Camera
+            try:
+                self.camera, self.camera_error = Camera(self.camera_spec), None
+            except Exception as exc:
+                self.camera_error = str(exc)
+        return self.camera
+
+    def frame(self):
+        if self.image:
+            return cv2.imread(str(self.image))
+        cam = self.cam()
+        return cam.latest() if cam else None
+
+    def start(self, job):
+        """Run one job in the background; refuse if one is already running."""
+        if not self.busy.acquire(blocking=False):
+            return False
+
+        def work():
+            try:
+                self.error = None
+                job()
+            except Exception as exc:
+                self.error = f"{type(exc).__name__}: {exc}"
+                traceback.print_exc()
+                store.set_state(stage="idle")
+            finally:
+                self.busy.release()
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    # jobs ----------------------------------------------------------------
+
+    def capture(self, seed=False, file=None):
+        frame = None
+        if not file and self.image:
+            file = self.image
+        if not file:
+            cam = self.cam()
+            if cam is None:
+                raise RuntimeError(self.camera_error or "no camera")
+            frame = cam.capture()  # the photo is taken before anything else moves
+        store.set_state(stage="reading")
+        card = visit.ingest(frame=frame, file=file)
+        if seed:
+            visit.shelve(card)
+            store.set_state(stage="idle")
+            return
+        self.visitor, self.job = card["card_no"], None
+        store.set_state(stage="confirm", visitor=self.img(card))
+
+    def confirm(self, yes):
+        card = store.load_card(self.visitor) if self.visitor else None
+        if not card or store.state().get("stage") != "confirm":
+            return
+        if not yes:  # retake: this photo is dropped, the operator captures again
+            visit.discard(card)
+            self.visitor = None
+            store.set_state(stage="idle")
+            return
+        store.set_state(stage="choosing", visitor=self.img(card))
+        self.job = visit.give(card)
+        visit.shelve(card)
+        self.show_job(card)
+
+    def another(self):
+        card = store.load_card(self.visitor) if self.visitor else None
+        if not card or not self.job or jobs.done(self.job["card_no"]):
+            return
+        tried = set(card.get("got", []))
+        visit.ungive(self.job)
+        store.set_state(stage="choosing", visitor=self.img(card))
+        card["status"] = "new"  # keep the visitor's own card off the rail while choosing
+        self.job = visit.give(card, exclude=tried)
+        if self.job.get("house") and tried:  # nothing else was waiting: give the first one back
+            jobs.job_file(self.job["card_no"]).unlink(missing_ok=True)
+            self.job = visit.give(card, exclude=())
+        visit.shelve(card)
+        self.show_job(card)
+
+    def img(self, card):
+        return card and card.get("crop") and "/" + card["crop"]
+
+    def show_job(self, visitor):
+        job = self.job
+        stranger = None if job.get("house") else store.load_card(job["card_no"])
+        store.set_state(stage="writing", visitor=self.img(visitor), stranger=self.img(stranger),
+                        by=job["picked_by"], marks=quote_marks(job["quote"], stranger, visitor),
+                        job=job["card_no"], started=time.time(), est_s=jobs.expected_seconds())
+        self.record_start(f"job{store.nnn(job['card_no'])}")
+
+    def watch_done(self):
+        """Fill the postmark when the arm's reply lands in done/."""
+        while True:
+            time.sleep(0.5)
+            st = store.state()
+            if st.get("stage") != "writing" or not self.job:
+                if self.recorder and self.recorder.auto and time.time() > self.recorder.until:
+                    self.record_stop()
+                continue
+            reply = jobs.done(self.job["card_no"])
+            if reply:
+                store.set_state(**{**st, "stage": "delivered", "postmark": {
+                    "written_at": self.job["written_at"], "delivered_at": reply.get("delivered_at"),
+                    "duration_s": reply.get("duration_s")}})
+                self.record_stop()
+
+    # recordings of test runs, for checking the arm against the page ----------
+
+    def record_start(self, label="run", auto=True):
+        cam = self.cam()
+        if cam is None or self.recorder:
+            return None
+        from .capture import Recorder
+        path = store.folder("runs") / f"{time.strftime('%H%M%S')}-{label}.mp4"
+        self.recorder = Recorder(cam, path, auto=auto, until=time.time() + 600)
+        return path
+
+    def record_stop(self):
+        if self.recorder:
+            self.recorder.stop()
+            self.recorder = None
+
+    def status(self):
+        def brief(c):
+            return {"no": c["card_no"], "line": c.get("line", ""), "name": c.get("name"), "ok": c.get("ok_to_show"),
+                    "error": c.get("read_error"), "corrected": c.get("corrected", False), "at": c.get("written_at")}
+        cards = store.all_cards()
+        visitor = store.load_card(self.visitor) if self.visitor else None
+        layout = lay.load()
+        return {
+            "state": store.state(), "busy": self.busy.locked(), "error": self.error,
+            "camera": self.image or (self.camera.name if self.camera else None),
+            "camera_error": self.camera_error or (self.camera.error if self.camera else None),
+            "visitor": visitor and {**brief(visitor), "img": self.img(visitor), "source": visitor.get("read_source"),
+                                    "blocks": [b["text"] for b in visitor.get("blocks", [])]},
+            "job": self.job, "done": self.job and jobs.done(self.job["card_no"]),
+            "rail": [brief(c) for c in cards if c.get("status") == "waiting"],
+            "unread": [brief(c) for c in cards if c.get("status") == "unread"],
+            "given": sum(c.get("status") == "given" for c in cards),
+            "layout": layout, "layout_measured": lay.measured(layout),
+            "recording": str(self.recorder.path.name) if self.recorder else None,
+        }
+
+
+def make_handler(app):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def local(self):
+            return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+        def send(self, body, ctype="application/json", code=200):
+            if isinstance(body, (dict, list)):
+                body = json.dumps(body).encode()
+            elif isinstance(body, str):
+                body = body.encode()
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def send_file(self, path, ctype=None):
+            path = Path(path)
+            if not path.is_file():
+                return self.send({"error": "not found"}, code=404)
+            types = {".jpg": "image/jpeg", ".png": "image/png", ".json": "application/json",
+                     ".html": "text/html; charset=utf-8"}
+            self.send(path.read_bytes(), ctype or types.get(path.suffix, "application/octet-stream"))
+
+        def send_jpeg(self, img, width=None, quality=80):
+            if img is None:
+                return self.send({"error": "no frame"}, code=503)
+            if width and img.shape[1] > width:
+                img = cv2.resize(img, (width, round(img.shape[0] * width / img.shape[1])))
+            self.send(cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])[1].tobytes(), "image/jpeg")
+
+        def do_GET(self):
+            url = urlparse(self.path)
+            path, name, query = url.path, Path(url.path).name, parse_qs(url.query)
+            if path == "/":
+                return self.send_file(SCREEN)
+            if path == "/state.json":
+                return self.send(store.state())
+            for shared, ok in (("cards", (".jpg", ".png")), ("jobs", (".json",)), ("done", (".json",))):
+                if path == f"/{shared}/index.json" and shared != "cards":
+                    return self.send(sorted(p.stem for p in store.folder(shared).glob("[0-9]*.json")))
+                if path.startswith(f"/{shared}/") and name.endswith(ok):
+                    return self.send_file(store.folder(shared) / name)
+            if not self.local():
+                return self.send({"error": "operator pages are local only"}, code=403)
+            if path in ("/op", "/layout"):
+                return self.send_file(WEB / f"{name}.html")
+            if path == "/api/status":
+                return self.send(app.status())
+            if path == "/preview.jpg":
+                return self.send_jpeg(app.frame(), width=960, quality=70)
+            if path == "/frame.jpg":
+                return self.send_jpeg(app.frame(), width=1920, quality=88)
+            if path == "/api/layout/card.jpg":  # the card squared up with corners being tried
+                frame = app.frame()
+                trial = lay.load()
+                try:
+                    c = [float(v) for v in query["corners"][0].split(",")]
+                    trial["corners"] = [[c[i], c[i + 1]] for i in range(0, 8, 2)]
+                    trial["card_mm"] = [float(v) for v in query["mm"][0].split(",")]
+                except (KeyError, ValueError, IndexError):
+                    pass
+                return self.send_jpeg(None if frame is None else lay.rectify(frame, trial), quality=88)
+            self.send({"error": "not found"}, code=404)
+
+        def do_POST(self):
+            url = urlparse(self.path)
+            path, query = url.path, parse_qs(url.query)
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > 65536:
+                return self.send({"error": "too large"}, code=413)
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}") if length else {}
+            except json.JSONDecodeError:
+                return self.send({"error": "not JSON"}, code=400)
+            arg = lambda k: body.get(k) if k in body else (query.get(k) or [None])[0]
+
+            # the arm laptop's reply: the one thing another machine may write
+            if path.startswith("/done/") and path.endswith(".json"):
+                stem = Path(path).stem
+                if not (stem.isdigit() and jobs.job_file(stem).exists() and isinstance(body, dict)):
+                    return self.send({"error": "no such job"}, code=404)
+                store.write_json(jobs.done_file(stem), {"delivered_at": str(body.get("delivered_at", ""))[:40],
+                                                         "duration_s": body.get("duration_s")
+                                                         if isinstance(body.get("duration_s"), (int, float)) else None})
+                return self.send({"ok": True})
+            if not self.local():
+                return self.send({"error": "local only"}, code=403)
+
+            ok = True
+            if path == "/api/capture":
+                seed = str(arg("seed")) in ("1", "true", "True")
+                file = arg("file")
+                ok = app.start(lambda: app.capture(seed=seed, file=file))
+            elif path == "/api/confirm":
+                yes = str(arg("yes")) in ("1", "true", "True")
+                ok = app.start(lambda: app.confirm(yes))
+            elif path == "/api/another":
+                ok = app.start(app.another)
+            elif path == "/api/reread":
+                card = store.load_card(arg("card"))
+                ok = bool(card) and app.start(lambda: read_card.read(card))
+            elif path == "/api/fix":
+                card = store.load_card(arg("card"))
+                if not card or not str(arg("text") or "").strip():
+                    return self.send({"error": "no such card or empty text"}, code=400)
+                visit.fix_line(card, arg("text"))
+            elif path == "/api/clear":
+                store.set_state(stage="idle")
+            elif path == "/api/layout":
+                keep = {k: body[k] for k in ("corners", "card_mm", "line", "name", "tick", "number", "page",
+                                             "mode", "camera", "house_line", "deadline_s", "tick_ink_min") if k in body}
+                lay.save({**lay.load(), **keep})
+            elif path == "/api/record":
+                if app.recorder:
+                    app.record_stop()
+                else:
+                    app.record_start(str(arg("label") or "run")[:24], auto=False)
+            else:
+                return self.send({"error": "not found"}, code=404)
+            self.send({"ok": True} if ok else {"ok": False, "error": "busy"}, code=200 if ok else 409)
+
+    return Handler
+
+
+def serve(port=8040, lan=False, camera_spec=None, use_camera=True, image=None, open_page=None):
+    app = App(camera_spec, use_camera, image)
+    store.set_state(stage="idle")
+    httpd = ThreadingHTTPServer(("0.0.0.0" if lan else "127.0.0.1", port), make_handler(app))
+    httpd.daemon_threads = True
+    print(f"screen    http://localhost:{port}/")
+    print(f"operator  http://localhost:{port}/op")
+    print(f"layout    http://localhost:{port}/layout")
+    if lan:
+        print("LAN on: other machines can read the screen, cards/, jobs/, done/ and POST /done/NNN.json")
+    threading.Thread(target=app.cam, daemon=True).start()  # warm the camera
+    threading.Thread(target=app.watch_done, daemon=True).start()
+    if open_page:
+        import webbrowser
+        threading.Timer(0.8, lambda: webbrowser.open(f"http://localhost:{port}{open_page}")).start()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        app.record_stop()
+        if app.camera:
+            app.camera.close()

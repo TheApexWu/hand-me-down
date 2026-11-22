@@ -115,6 +115,36 @@ class Camera:
         self.cap.release()
 
 
+class Recorder:
+    """Writes the camera to an .mp4 in runs/ at ~10 fps, 1280 wide, until stop()."""
+
+    def __init__(self, camera, path, fps=10, width=1280, auto=True, until=None):
+        self.camera, self.path, self.fps, self.width = camera, path, fps, width
+        self.auto, self.until = auto, until or time.time() + 600
+        self.alive = True
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.thread.start()
+
+    def _loop(self):
+        writer = None
+        while self.alive and time.time() < self.until + 5:
+            tick = time.time()
+            frame = self.camera.latest()
+            if frame is not None:
+                h = round(frame.shape[0] * self.width / frame.shape[1]) // 2 * 2
+                frame = cv2.resize(frame, (self.width, h))
+                if writer is None:
+                    writer = cv2.VideoWriter(str(self.path), cv2.VideoWriter_fourcc(*"mp4v"), self.fps, (self.width, h))
+                writer.write(frame)
+            time.sleep(max(0, 1 / self.fps - (time.time() - tick)))
+        if writer is not None:
+            writer.release()
+
+    def stop(self):
+        self.alive = False
+        self.thread.join(timeout=3)
+
+
 def save_card_photo(frame, card_no=None, layout=None):
     """Save the frame as cards/NNN.jpg and the squared-up card as cards/NNN_card.jpg.
 
