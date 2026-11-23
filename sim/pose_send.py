@@ -1,6 +1,6 @@
 """Streams the arm's live joints to the card side's 3D panel.
 
-  HMD_TOKEN=... python pose_send.py --url http://192.168.50.198:8040
+  HMD_TOKEN=... python pose_send.py --url http://CARD_LAPTOP_IP:8040
 """
 import argparse
 import json

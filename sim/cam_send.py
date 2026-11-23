@@ -2,7 +2,7 @@
 
 The wrist camera is never sent: it faces the room and sees people.
 
-  HMD_TOKEN=... python cam_send.py --url http://192.168.50.198:8040
+  HMD_TOKEN=... python cam_send.py --url http://CARD_LAPTOP_IP:8040
 """
 import argparse
 import os

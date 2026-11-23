@@ -4,6 +4,7 @@ Leaves the arm holding its starting pose with torque ON (it would drop if switch
 Release later with:  python jog_test.py --release   (support the arm first).
 """
 import json
+import os
 import sys
 import time
 
@@ -13,7 +14,7 @@ import arm_tools as at
 import penlib as pl
 
 PORT = "/dev/tty.usbmodem5CBC4305521"
-CAL = "/Users/amadeuswoo/.cache/huggingface/lerobot/calibration/robots/so_follower/follower_a.json"
+CAL = os.path.expanduser("~/.cache/huggingface/lerobot/calibration/robots/so_follower/follower_a.json")
 STEP_DEG, SPEED, HOLD_S = 10.0, 20.0, 1.5
 K = 360 / 4095
 

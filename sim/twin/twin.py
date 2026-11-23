@@ -14,7 +14,7 @@ from pathlib import Path
 import mujoco, mujoco.viewer
 import numpy as np
 
-SIM = Path("/Users/amadeuswoo/dev/hand-me-down/sim")
+SIM = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SIM))
 import penlib as pl
 
