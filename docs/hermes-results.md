@@ -126,3 +126,9 @@ Takeaways:
 7. **pnpm warning.** Every `hermes` command prints "install out of sync (pnpm: not installed or outdated)". It is harmless, and there is no `hermes update` today.
 8. **Tool search.** With tool search on, Hermes exposed helper tools beyond `give`. It is off in both profiles.
 9. **Contact details.** Emails, phone numbers, URLs and @handles are caught by regex in `card/gate.py` and are never sent to a model.
+
+## Changes after these notes (22 Nov, arm side)
+
+- The stage demo ran Hermes on the arm laptop through local `gate` and `chooser` profiles instead of the Docker container. The chooser used `anthropic/claude-haiku-5.5` through the Nous Portal.
+- The fragment problem above is fixed in `card/quotes.py`. Phrases that end on a weak word or hang on "you" are no longer offered. In a dry test, all 6 real Hermes picks were complete phrases (4.7-7.7 s).
+- The one-card rule shortcut is gone, so Hermes makes the pick even when one card is waiting.

@@ -18,4 +18,17 @@ Photos and measurements from the physical SO-101 on 22 November 2026. The cards 
 - `hermes-live-run.json`: the tools Hermes called, their results and its final decision.
 - `hermes-live-joints.csv`: commanded and measured joint angles for that run, 1,625 ticks at 50 Hz.
 
-The ink pass line comes from one real card, so treat it as a rough check. The arm has not yet passed 3 clean runs through the full card pipeline.
+## Full pipeline runs
+
+Each of these went from a real card through Reducto and Hermes to ink on the arm. Their photos and videos stay private because the cards carry visitors' handwriting. They were not scored for ink.
+
+| Time | Job | Inked | Writing time |
+|---|---|---|---|
+| 15:46 | 706 | Don't Give Up | 51 s |
+| 16:12 | 701 | Keep pushing You'll | 64 s |
+| ~16:15 | 700 | I hope you | about 41 s (planned) |
+| 16:42 | 700 | you are okay | 50 s |
+| 18:13 | 702 | proud of you | 49 s |
+| 18:15 | 703 | don't worry | 48 s |
+
+The ink pass line comes from one real card, so treat it as a rough check.

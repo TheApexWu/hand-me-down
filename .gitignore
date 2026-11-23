@@ -7,6 +7,8 @@ hermes-install.sh
 sim/traj*.json
 runs/
 state/
+# card photos, webcam frames and run data from the arm laptop
+private/
 
 # card side: runtime data (photos of visitors' cards stay off the repo)
 .env

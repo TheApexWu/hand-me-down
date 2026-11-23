@@ -6,7 +6,7 @@ machines: pulls new jobs/NNN.json (and the crop and card image each one names) f
 laptop, removes local jobs the card side has withdrawn, and sends done/NNN.json back when the
 arm side writes it. Standard library only.
 
-  python card/arm_sync.py --host 192.168.50.198 --token TOKEN
+  python card/arm_sync.py --host CARD_LAPTOP_IP --token TOKEN
 
 The card laptop prints this exact line, with its address and token, when it starts with
   python -m card serve --lan

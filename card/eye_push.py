@@ -6,7 +6,7 @@ way arm_sync does. The operator page's preview, capture, Demo run and the layout
 Standard library and OpenCV only.
 
   python card/eye_push.py --list
-  python card/eye_push.py --host 192.168.50.198 --port 8040 --token TOKEN --camera 0
+  python card/eye_push.py --host CARD_LAPTOP_IP --port 8040 --token TOKEN --camera 0
 """
 import argparse
 import os
